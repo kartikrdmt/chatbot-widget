@@ -1,0 +1,100 @@
+# ==============================
+# Dependencies
+# ==============================
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.yarn-cache/
+
+# ==============================
+# Environment Variables
+# ==============================
+.env
+.env.*
+!.env.example
+
+# ==============================
+# Build / Output
+# ==============================
+dist/
+build/
+.next/
+out/
+.nuxt/
+coverage/
+.turbo/
+.cache/
+
+# ==============================
+# Logs
+# ==============================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================
+# OS Files
+# ==============================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==============================
+# IDE / Editors
+# ==============================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+.idea/
+*.iml
+
+# ==============================
+# TypeScript
+# ==============================
+*.tsbuildinfo
+
+# ==============================
+# Testing
+# ==============================
+.nyc_output/
+jest-coverage/
+
+# ==============================
+# Temporary Files
+# ==============================
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ==============================
+# Runtime / Process Files
+# ==============================
+*.pid
+*.pid.lock
+
+# ==============================
+# Docker
+# ==============================
+.docker/
+
+# ==============================
+# Local Database / Storage
+# ==============================
+*.sqlite
+*.sqlite3
+*.db
+
+# ==============================
+# Misc
+# ==============================
+.DS_Store
+*.swp
+*.swo

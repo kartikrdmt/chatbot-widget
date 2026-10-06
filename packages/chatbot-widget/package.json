@@ -1,0 +1,32 @@
+{
+  "name": "@myra-technolabs/chatbot-widget",
+  "version": "0.1.0",
+  "description": "Myra Technolabs AI chatbot widget for React and Next.js.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "19.2.8",
+    "typescript": "^5"
+  }
+}
