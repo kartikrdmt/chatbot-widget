@@ -157,6 +157,23 @@ Every script-tag option is a prop with the same meaning, written in camelCase
 instead of floating. Full details are in the
 [package README](packages/chatbot-widget/README.md).
 
+### Using the package straight from a clone (before it's on npm)
+
+The package is only a small loader. The chat itself comes from `widget.js`, so the **client and
+server must be running (or deployed)** wherever the package is used. Then, in the project that
+should use it:
+
+```bash
+# one-time: build the package (npm install in that folder does it for you)
+cd packages/chatbot-widget && npm install
+
+# in your other React / Next.js project
+npm install /path/to/Chatbot-widget/packages/chatbot-widget
+```
+
+Point `widgetUrl` and `apiUrl` at your running client and server, and make sure that project's
+address is in `WIDGET_SITES`.
+
 The package isn't on npm yet. To publish it you need your own npm account:
 
 ```bash
