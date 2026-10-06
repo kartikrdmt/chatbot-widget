@@ -1,7 +1,8 @@
 # @myra-technolabs/chatbot-widget
 
-The Myra Technolabs AI chatbot for React and Next.js. It loads the widget from your widget
-host in an iframe, so your site's CSS can't break it and it can't break yours.
+The Myra Technolabs AI chatbot for React and Next.js. It loads `widget.js` from your widget host,
+and the chat is drawn inside a Shadow DOM, so your site's CSS can't break it and it can't break
+yours.
 
 ```bash
 npm install @myra-technolabs/chatbot-widget
@@ -17,7 +18,7 @@ export function Chat() {
       widgetUrl="https://chat.example.com"
       apiUrl="https://api.example.com"
       position="bottom-left"
-      accentColor="#ea7a2d"
+      accentColor="#16a34a"
       title="Myra Technolabs"
       subtitle="AI assistant"
     />
@@ -47,7 +48,7 @@ a server component such as `app/layout.tsx`.
 
 | Prop | What it controls |
 | --- | --- |
-| `widgetKey`, `widgetUrl`, `apiUrl` | Required. Site key, widget host, API host |
+| `widgetKey`, `widgetUrl`, `apiUrl` | Required. Site key, where `widget.js` is hosted, API host |
 | `position`, `offset`, `width`, `height`, `inline` | Placement and size (above) |
 | `title`, `subtitle`, `greeting`, `placeholder`, `avatarText` | Texts |
 | `accentColor` | Header, launcher, send button, your bubbles, bot avatar |

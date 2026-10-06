@@ -8,8 +8,6 @@ import {
 } from '@/lib/contracts/widget';
 import { io, type Socket } from 'socket.io-client';
 
-import { API_URL } from '@/lib/api';
-
 import { type ChatTransport, type ConnectionStatus, Emitter } from './chat-transport';
 import { getVisitorId } from './visitor-id';
 
@@ -19,8 +17,8 @@ export class SocketChatTransport implements ChatTransport {
   private readonly typing = new Emitter<boolean>();
   private readonly status = new Emitter<ConnectionStatus>();
 
-  constructor(widgetKey: string) {
-    this.socket = io(`${API_URL}${WIDGET_SOCKET_NAMESPACE}`, {
+  constructor(widgetKey: string, apiUrl: string) {
+    this.socket = io(`${apiUrl}${WIDGET_SOCKET_NAMESPACE}`, {
       autoConnect: false,
       transports: ['websocket'],
       auth: { key: widgetKey, visitorId: getVisitorId() },

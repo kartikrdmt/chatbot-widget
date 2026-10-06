@@ -25,7 +25,11 @@ export class WidgetGateway implements OnGatewayConnection {
 
   handleConnection(client: Socket): void {
     const auth = WidgetSocketAuthSchema.safeParse(client.handshake.auth);
-    if (!auth.success || !this.sites.find(auth.data.key)) {
+    const site = auth.success ? this.sites.find(auth.data.key) : undefined;
+    // Browsers always send Origin on a socket handshake, so a page on a site that
+    // is not on this key's allow-list is turned away. Server-side callers send none.
+    const origin = client.handshake.headers.origin;
+    if (!site || (origin && !this.sites.isOriginAllowed(site, origin))) {
       client.disconnect(true);
       return;
     }

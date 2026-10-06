@@ -34,6 +34,11 @@ export class WidgetSitesService {
     return site;
   }
 
+  /** Every origin that any site is allowed to embed the widget from. */
+  allOrigins(): string[] {
+    return [...this.sites.values()].flatMap((site) => site.allowedOrigins);
+  }
+
   isOriginAllowed(site: WidgetSite, origin: string): boolean {
     const candidate = normalizeOrigin(origin);
     return site.allowedOrigins.some(

@@ -53,7 +53,7 @@ export interface UseChatResult {
  * The conversation is kept in `localStorage` per widget key, so it survives a
  * page refresh. The greeting is only added to a conversation that is empty.
  */
-export function useChat(widgetKey: string, greeting: string): UseChatResult {
+export function useChat(widgetKey: string, apiUrl: string, greeting: string): UseChatResult {
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
   const [typing, setTyping] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
@@ -77,7 +77,7 @@ export function useChat(widgetKey: string, greeting: string): UseChatResult {
   }, [widgetKey]);
 
   useEffect(() => {
-    const transport = createChatTransport(widgetKey);
+    const transport = createChatTransport(widgetKey, apiUrl);
     transportRef.current = transport;
 
     const unsubscribers = [
@@ -93,7 +93,7 @@ export function useChat(widgetKey: string, greeting: string): UseChatResult {
       transport.disconnect();
       transportRef.current = null;
     };
-  }, [widgetKey]);
+  }, [widgetKey, apiUrl]);
 
   const sendMessage = useCallback((text: string) => {
     const trimmed = text.trim();

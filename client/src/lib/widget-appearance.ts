@@ -6,27 +6,38 @@ import {
   type WidgetTheme,
 } from '@/lib/contracts/widget';
 
-type SearchParams = Record<string, string | string[] | undefined>;
+/** The options a site passes to `MyraWidget.init` (or as `data-*` attributes) for how the chat looks. */
+export interface WidgetAppearanceOptions {
+  title?: string;
+  subtitle?: string;
+  greeting?: string;
+  placeholder?: string;
+  avatarText?: string;
+  accentColor?: string;
+  accentTextColor?: string;
+  backgroundColor?: string;
+  chatBackgroundColor?: string;
+  textColor?: string;
+  mutedColor?: string;
+  borderColor?: string;
+}
 
-const first = (value: string | string[] | undefined): string | undefined =>
-  (Array.isArray(value) ? value[0] : value) || undefined;
-
-/** Reads the appearance the embed script forwards from its `data-*` attributes. */
-export function parseWidgetAppearance(params: SearchParams): WidgetAppearance {
+/** Anything invalid (a bad colour, an over-long text) is dropped rather than rejected. */
+export function parseWidgetAppearance(options: WidgetAppearanceOptions): WidgetAppearance {
   return WidgetAppearanceSchema.parse({
-    title: first(params.title),
-    subtitle: first(params.subtitle),
-    greeting: first(params.greeting),
-    placeholder: first(params.placeholder),
-    avatarText: first(params.avatarText),
+    title: options.title,
+    subtitle: options.subtitle,
+    greeting: options.greeting,
+    placeholder: options.placeholder,
+    avatarText: options.avatarText,
     theme: {
-      accent: first(params.accent),
-      accentForeground: first(params.accentText),
-      surface: first(params.surface),
-      raised: first(params.raised),
-      foreground: first(params.text),
-      muted: first(params.muted),
-      border: first(params.border),
+      accent: options.accentColor,
+      accentForeground: options.accentTextColor,
+      surface: options.backgroundColor,
+      raised: options.chatBackgroundColor,
+      foreground: options.textColor,
+      muted: options.mutedColor,
+      border: options.borderColor,
     },
   });
 }

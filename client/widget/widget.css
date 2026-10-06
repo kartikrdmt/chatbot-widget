@@ -1,0 +1,44 @@
+/*
+ * Styles for the embeddable widget. Built by scripts/build-widget.mjs and injected into the
+ * widget's shadow root, so nothing here can reach the host page and the page can't restyle it.
+ */
+@import 'tailwindcss' source(none);
+@source '../src/components/chat-widget';
+@source './widget-app.tsx';
+
+/* Defaults for the theme, overridden by the data-* colour options. */
+:host {
+  --chat-surface: oklch(1 0 0);
+  --chat-raised: oklch(0.97 0.006 265);
+  --chat-border: oklch(0.91 0.01 265);
+  --chat-foreground: oklch(0.25 0.05 265);
+  --chat-muted: oklch(0.5 0.03 265);
+  --chat-dim: oklch(0.62 0.025 265);
+  --chat-accent: oklch(0.31 0.075 265);
+  --chat-accent-foreground: oklch(1 0 0);
+}
+
+@theme inline {
+  --color-chat-surface: var(--chat-surface);
+  --color-chat-raised: var(--chat-raised);
+  --color-chat-border: var(--chat-border);
+  --color-chat-foreground: var(--chat-foreground);
+  --color-chat-muted: var(--chat-muted);
+  --color-chat-dim: var(--chat-dim);
+  --color-chat-accent: var(--chat-accent);
+  --color-chat-accent-foreground: var(--chat-accent-foreground);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.myra-widget-root {
+  /* Inherited properties (font, colour, letter-spacing...) cross the shadow boundary from
+     the host page, so reset them all here and set only what the widget wants. */
+  all: initial;
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  color: var(--chat-foreground);
+}

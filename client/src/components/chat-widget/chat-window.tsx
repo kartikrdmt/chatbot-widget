@@ -11,6 +11,7 @@ import { ChatMessageList } from './chat-message-list';
 
 interface ChatWindowProps {
   config: WidgetConfig;
+  apiUrl: string;
   appearance?: WidgetAppearance;
   expanded?: boolean;
   onClose?: () => void;
@@ -19,13 +20,14 @@ interface ChatWindowProps {
 
 export function ChatWindow({
   config,
+  apiUrl,
   appearance,
   expanded = false,
   onClose,
   onToggleExpand,
 }: ChatWindowProps): React.ReactElement {
   const greeting = appearance?.greeting ?? config.greeting;
-  const { messages, typing, status, sendMessage } = useChat(config.key, greeting);
+  const { messages, typing, status, sendMessage } = useChat(config.key, apiUrl, greeting);
 
   return (
     <div
