@@ -8,11 +8,29 @@ import { ChatBrandMark } from './chat-brand-mark';
 const MARKDOWN_STYLES =
   'break-words [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0';
 
-// The chat runs in an iframe, so links must open a new tab instead of loading inside it.
+const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+
+const safeHref = (href: string | undefined): string | undefined => {
+  if (!href) return undefined;
+  try {
+    const url = new URL(href);
+    return SAFE_PROTOCOLS.has(url.protocol) ? href : undefined;
+  } catch {
+    // Relative URLs have no protocol — allow them as-is
+    return href.startsWith('/') || href.startsWith('#') || href.startsWith('.') ? href : undefined;
+  }
+};
+
 const MARKDOWN_COMPONENTS: Components = {
-  a: ({ node, ...props }) => {
+  a: ({ node, href, children, ...props }) => {
     void node;
-    return <a {...props} target="_blank" rel="noopener noreferrer" />;
+    const safe = safeHref(href);
+    if (!safe) return <>{children}</>;
+    return (
+      <a {...props} href={safe} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
   },
 };
 
@@ -24,6 +42,7 @@ interface ChatMessageBubbleProps {
   showAvatar: boolean;
   showTime: boolean;
   avatarText?: string;
+  showSources?: boolean;
 }
 
 export function ChatMessageBubble({
@@ -31,6 +50,7 @@ export function ChatMessageBubble({
   showAvatar,
   showTime,
   avatarText,
+  showSources = true,
 }: ChatMessageBubbleProps): React.ReactElement {
   if (message.sender === 'visitor') {
     return (
@@ -60,6 +80,21 @@ export function ChatMessageBubble({
           <div className={MARKDOWN_STYLES}>
             <ReactMarkdown components={MARKDOWN_COMPONENTS}>{message.text}</ReactMarkdown>
           </div>
+          {showSources && message.sources && message.sources.length > 0 ? (
+            <div className="border-chat-border mt-2 flex flex-wrap gap-1.5 border-t pt-2">
+              {message.sources.map((source) => (
+                <a
+                  key={source.url}
+                  href={safeHref(source.url) ?? '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-chat-accent border-chat-border rounded-full border px-2.5 py-0.5 text-[11px] font-medium hover:underline"
+                >
+                  {source.title}
+                </a>
+              ))}
+            </div>
+          ) : null}
         </div>
         {showTime ? (
           <span className="text-chat-dim px-1 text-[11px]">{formatTime(message.createdAt)}</span>

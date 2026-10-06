@@ -15,53 +15,44 @@
   <body>
     <h1>Any customer website</h1>
     <p>The chat button on this page comes from one script tag at the bottom of the page.</p>
+    <p>Only <code>data-site-token</code> is required. All branding and text come from the
+       server config. The optional attributes below are developer overrides.</p>
 
     <!--
-      Every data-* attribute below is optional. What each one controls:
+      data-site-token          Site public token (st_…) — the only required attribute.
 
-      The chat is drawn inside a Shadow DOM, so this page's CSS can't affect it.
+      Optional overrides (take precedence over the server config):
 
-      data-key                      Widget key (must be allowed on the server)
-      data-api-url                  Backend URL
+      data-api-url             Backend URL (for staging / self-hosting; omit for production)
+      data-position            bottom-right | bottom-left | bottom-center | top-right |
+                               top-left | top-center | left-center | right-center
+      data-offset              Gap in px between the widget and the screen edge
+      data-width / data-height Largest size of the chat window (px, or e.g. 90vw)
+      data-container           CSS selector (e.g. "#chat"): show the chat inside that
+                               element instead of floating
 
-      data-position                 bottom-right | bottom-left | bottom-center | top-right |
-                                    top-left | top-center | left-center | right-center
-      data-offset                   Gap in px between the widget and the screen edge
-      data-width / data-height      Largest size of the chat window (px, or e.g. 90vw)
-      data-container                CSS selector (e.g. "#chat"): show the chat inside that
-                                    element instead of floating, e.g. in the page centre
+      data-title               Header title
+      data-subtitle            Small line under the header title
+      data-greeting            First message the bot shows in a new chat
+      data-placeholder         Placeholder text in the message input
+      data-avatar-text         Letter(s) inside the bot avatar (max 2)
 
-      data-title                    Header title
-      data-subtitle                 Small line under the header title
-      data-greeting                 First message the bot shows in a new chat
-      data-placeholder              Placeholder text in the message input
-      data-avatar-text              Letter(s) inside the bot avatar (max 2)
+      data-accent-color        Main brand colour
+      data-accent-text-color   Text/icon colour on top of the accent colour
+      data-background-color    Chat window and bot message bubble background
+      data-chat-background-color  Background of the messages area
+      data-text-color          Main text colour
+      data-muted-color         Secondary text: timestamps, "Today", placeholder
+      data-border-color        Borders and divider lines
 
-      data-accent-color             Main brand colour: header, launcher button,
-                                    send button, visitor message bubbles, bot avatar
-      data-accent-text-color        Text/icon colour on top of the accent colour
-      data-background-color         Chat window and bot message bubble background
-      data-chat-background-color    Background of the messages area
-      data-text-color               Main text colour (bot messages, typed text)
-      data-muted-color              Secondary text: timestamps, "Today", placeholder
-      data-border-color             Borders and divider lines
+      Deprecated (accepted for one release, then removed):
+      data-key                 Old widget key — use data-site-token instead
     -->
     <script
       src="http://localhost:3000/widget.js"
-      data-key="demo-key"
+      data-site-token="st_demo"
       data-api-url="http://localhost:4000"
-      data-title="Myra Technolabs"
-      data-subtitle="AI assistant · replies instantly"
-      data-greeting="Hi! I'm the Myra Technolabs assistant. Ask me anything."
-      data-placeholder="Type your question..."
-      data-avatar-text="M"
-      data-accent-color="#16a34a"
-      data-accent-text-color="#ffffff"
-      data-background-color="#ffffff"
-      data-chat-background-color="#f0fdf4"
-      data-text-color="#14532d"
-      data-muted-color="#6f9a80"
-      data-border-color="#cdeed9"
+      async
     ></script>
   </body>
 </html>

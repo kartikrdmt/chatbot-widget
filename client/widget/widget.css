@@ -6,7 +6,7 @@
 @source '../src/components/chat-widget';
 @source './widget-app.tsx';
 
-/* Defaults for the theme, overridden by the data-* colour options. */
+/* Defaults for the theme, overridden by the data-* colour options or server config. */
 :host {
   --chat-surface: oklch(1 0 0);
   --chat-raised: oklch(0.97 0.006 265);
@@ -16,6 +16,7 @@
   --chat-dim: oklch(0.62 0.025 265);
   --chat-accent: oklch(0.31 0.075 265);
   --chat-accent-foreground: oklch(1 0 0);
+  --chat-radius: 0.75rem;
 }
 
 @theme inline {
@@ -36,7 +37,7 @@
      the host page, so reset them all here and set only what the widget wants. */
   all: initial;
   display: block;
-  font-family: var(--font-sans);
+  font-family: var(--chat-font-family, var(--font-sans));
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;

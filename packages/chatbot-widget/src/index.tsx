@@ -16,12 +16,15 @@ export type ChatbotPosition =
 export type ChatbotSize = number | string;
 
 export interface ChatbotWidgetProps {
-  /** The site's widget key. */
-  widgetKey: string;
-  /** Where the widget app is hosted, for example `https://chat.example.com`. */
-  widgetUrl: string;
-  /** The chatbot API, for example `https://api.example.com`. */
-  apiUrl: string;
+  /** The site's public token (st_…). Required. */
+  siteToken: string;
+  /**
+   * Where the widget app bundle is hosted, for example `https://chat.example.com`.
+   * Defaults to the production CDN URL baked into the bundle.
+   */
+  widgetUrl?: string;
+  /** The chatbot API, for example `https://api.example.com`. Defaults to the production API. */
+  apiUrl?: string;
 
   /**
    * Floating widgets only. Defaults to the position configured on the server, or
@@ -44,18 +47,22 @@ export interface ChatbotWidgetProps {
   /** Inline only: style for the box around the chat. */
   style?: CSSProperties;
 
+  /** Override the title from the server config. */
   title?: string;
+  /** Override the subtitle from the server config. */
   subtitle?: string;
+  /** Override the greeting from the server config. */
   greeting?: string;
+  /** Override the input placeholder from the server config. */
   placeholder?: string;
-  /** One or two letters shown in the bot's avatar. */
+  /** One or two letters shown in the bot's avatar. Overrides the server config. */
   avatarText?: string;
 
-  /** Header, launcher button, send button, your message bubbles and the bot avatar. */
+  /** Override the brand colour (header, launcher, send button, visitor bubbles, avatar). */
   accentColor?: string;
   /** Text and icons drawn on top of the accent colour. */
   accentTextColor?: string;
-  /** Chat window and bot message bubbles. */
+  /** Chat window and bot message bubble background. */
   backgroundColor?: string;
   /** The messages area behind the bubbles. */
   chatBackgroundColor?: string;
@@ -113,6 +120,14 @@ function loadWidgetScript(widgetUrl: string): Promise<MyraWidgetApi> {
 /**
  * The Myra Technolabs chatbot. Floats over the page by default; pass `inline`
  * to place it inside your layout instead.
+ *
+ * @example
+ * // Floating (minimal)
+ * <ChatbotWidget siteToken="st_xxxxxxxx" />
+ *
+ * @example
+ * // Embedded inside a layout
+ * <ChatbotWidget siteToken="st_xxxxxxxx" inline />
  */
 export function ChatbotWidget({
   inline = false,
@@ -121,25 +136,32 @@ export function ChatbotWidget({
   ...props
 }: ChatbotWidgetProps): React.ReactElement | null {
   const hostRef = useRef<HTMLDivElement>(null);
-  // Re-mount only when a value really changes, not on every new props object.
   const optionsKey = JSON.stringify(props);
 
   useEffect(() => {
-    const { widgetKey, widgetUrl, ...rest } = JSON.parse(optionsKey) as ChatbotWidgetProps;
+    const { siteToken, widgetUrl, ...rest } = JSON.parse(optionsKey) as ChatbotWidgetProps;
+    const resolvedWidgetUrl = widgetUrl ?? '';
     let cancelled = false;
     let instance: MyraWidgetInstance | null = null;
 
-    loadWidgetScript(widgetUrl)
-      .then((api) => {
-        if (cancelled) return;
-        instance = api.init({
-          ...rest,
-          key: widgetKey,
-          widgetUrl,
-          container: inline ? hostRef.current : undefined,
-        });
-      })
-      .catch((error: unknown) => console.error('[ChatbotWidget]', error));
+    const doInit = (api: MyraWidgetApi): void => {
+      if (cancelled) return;
+      instance = api.init({
+        ...rest,
+        siteToken,
+        container: inline ? hostRef.current : undefined,
+      });
+    };
+
+    if (resolvedWidgetUrl) {
+      loadWidgetScript(resolvedWidgetUrl)
+        .then(doInit)
+        .catch((error: unknown) => console.error('[ChatbotWidget]', error));
+    } else if (window.MyraWidget?.init) {
+      doInit(window.MyraWidget);
+    } else {
+      console.warn('[ChatbotWidget] No widgetUrl provided and window.MyraWidget is not loaded.');
+    }
 
     return () => {
       cancelled = true;

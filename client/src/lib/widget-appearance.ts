@@ -42,7 +42,7 @@ export function parseWidgetAppearance(options: WidgetAppearanceOptions): WidgetA
   });
 }
 
-const THEME_VARIABLES: Record<keyof WidgetTheme, string> = {
+const THEME_VARIABLES: Partial<Record<keyof WidgetTheme, string>> = {
   accent: '--chat-accent',
   accentForeground: '--chat-accent-foreground',
   surface: '--chat-surface',
@@ -52,13 +52,48 @@ const THEME_VARIABLES: Record<keyof WidgetTheme, string> = {
   border: '--chat-border',
 };
 
-/** `muted` also drives the dim text colour, which the widget uses for timestamps. */
-export function themeToStyle(theme: WidgetTheme | undefined): CSSProperties {
-  const style: Record<string, string> = {};
-  for (const [key, variable] of Object.entries(THEME_VARIABLES)) {
-    const value = theme?.[key as keyof WidgetTheme];
-    if (value) style[variable] = value;
+const RADIUS_VALUES: Record<string, string> = {
+  square: '0px',
+  rounded: '0.75rem',
+  pill: '9999px',
+};
+
+/**
+ * Merges server-provided theme with appearance overrides from data-* attributes / React props,
+ * then converts to CSS custom properties for the shadow root.
+ * `muted` also drives dim text (timestamps). `radius` sets `--chat-radius`.
+ * `font` sets `--chat-font-family` (the Google Font name; injection of <link> is handled in entry.tsx).
+ */
+export function themeToStyle(
+  serverTheme: WidgetTheme | undefined,
+  appearanceTheme?: WidgetTheme | undefined,
+): CSSProperties {
+  // Appearance overrides win; undefined values from appearance do not clobber server values
+  const merged: Partial<WidgetTheme> = { ...serverTheme };
+  if (appearanceTheme) {
+    for (const key of Object.keys(appearanceTheme) as (keyof WidgetTheme)[]) {
+      if (appearanceTheme[key] !== undefined) {
+        (merged as Record<string, unknown>)[key] = appearanceTheme[key];
+      }
+    }
   }
-  if (theme?.muted) style['--chat-dim'] = theme.muted;
+
+  const style: Record<string, string> = {};
+
+  for (const [key, variable] of Object.entries(THEME_VARIABLES)) {
+    const value = merged[key as keyof WidgetTheme];
+    if (value && typeof value === 'string') style[variable] = value;
+  }
+
+  if (merged.muted) style['--chat-dim'] = merged.muted;
+
+  if (merged.radius) {
+    style['--chat-radius'] = RADIUS_VALUES[merged.radius] ?? RADIUS_VALUES.rounded;
+  }
+
+  if (merged.font) {
+    style['--chat-font-family'] = `'${merged.font}', var(--font-sans)`;
+  }
+
   return style as CSSProperties;
 }

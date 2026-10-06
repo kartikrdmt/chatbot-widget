@@ -3,7 +3,6 @@ import { ChevronDown, MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { ChatWindow } from '@/components/chat-widget/chat-window';
-import { themeToStyle } from '@/lib/widget-appearance';
 
 import { floatingLayout, LAUNCHER_SIZE, type Position } from './layout';
 
@@ -14,6 +13,7 @@ export interface WidgetController {
 
 interface WidgetAppProps {
   config: WidgetConfig;
+  sessionToken: string;
   apiUrl: string;
   appearance: WidgetAppearance;
   /** Set when the chat sits inside the page instead of floating over it. */
@@ -23,6 +23,8 @@ interface WidgetAppProps {
   width: string;
   height: string;
   onController: (controller: WidgetController) => void;
+  onSessionExpired: () => void;
+  onDisabled: () => void;
 }
 
 const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
@@ -34,19 +36,19 @@ const PANEL_TRANSITION = [
   ),
 ].join(', ');
 
-const stateKey = (widgetKey: string): string => `myra.widget.open.${widgetKey}`;
+const stateKey = (siteId: string): string => `myra.widget.open.${siteId}`;
 
-function readOpen(widgetKey: string): boolean {
+function readOpen(siteId: string): boolean {
   try {
-    return sessionStorage.getItem(stateKey(widgetKey)) === '1';
+    return sessionStorage.getItem(stateKey(siteId)) === '1';
   } catch {
     return false;
   }
 }
 
-function saveOpen(widgetKey: string, open: boolean): void {
+function saveOpen(siteId: string, open: boolean): void {
   try {
-    sessionStorage.setItem(stateKey(widgetKey), open ? '1' : '0');
+    sessionStorage.setItem(stateKey(siteId), open ? '1' : '0');
   } catch {
     // Storage can be blocked; the chat just won't reopen after a refresh.
   }
@@ -54,6 +56,7 @@ function saveOpen(widgetKey: string, open: boolean): void {
 
 export function WidgetApp({
   config,
+  sessionToken,
   apiUrl,
   appearance,
   inline,
@@ -62,9 +65,10 @@ export function WidgetApp({
   width,
   height,
   onController,
+  onSessionExpired,
+  onDisabled,
 }: WidgetAppProps): React.ReactElement {
-  // Read once, on the first render, so a refresh reopens a chat that was open.
-  const [open, setOpen] = useState(() => !inline && readOpen(config.key));
+  const [open, setOpen] = useState(() => !inline && readOpen(config.siteId));
   const [expanded, setExpanded] = useState(false);
   const [hasOpened, setHasOpened] = useState(open);
 
@@ -73,24 +77,26 @@ export function WidgetApp({
       setOpen(next);
       if (next) setHasOpened(true);
       else setExpanded(false);
-      saveOpen(config.key, next);
+      saveOpen(config.siteId, next);
     },
-    [config.key],
+    [config.siteId],
   );
 
   useEffect(() => {
     onController({ open: () => changeOpen(true), close: () => changeOpen(false) });
   }, [onController, changeOpen]);
 
-  const theme = themeToStyle(appearance.theme);
-
   if (inline) {
     return (
-      <div
-        style={theme}
-        className="border-chat-border h-full w-full overflow-hidden rounded-2xl border"
-      >
-        <ChatWindow config={config} apiUrl={apiUrl} appearance={appearance} />
+      <div className="border-chat-border h-full w-full overflow-hidden rounded-2xl border">
+        <ChatWindow
+          config={config}
+          sessionToken={sessionToken}
+          apiUrl={apiUrl}
+          appearance={appearance}
+          onSessionExpired={onSessionExpired}
+          onDisabled={onDisabled}
+        />
       </div>
     );
   }
@@ -99,7 +105,7 @@ export function WidgetApp({
   const LauncherIcon = open ? ChevronDown : MessageSquare;
 
   return (
-    <div style={theme}>
+    <div>
       <div
         style={{
           ...layout.panel,
@@ -113,11 +119,14 @@ export function WidgetApp({
         {hasOpened ? (
           <ChatWindow
             config={config}
+            sessionToken={sessionToken}
             apiUrl={apiUrl}
             appearance={appearance}
             expanded={expanded}
             onClose={() => changeOpen(false)}
             onToggleExpand={() => setExpanded((previous) => !previous)}
+            onSessionExpired={onSessionExpired}
+            onDisabled={onDisabled}
           />
         ) : null}
       </div>

@@ -1,4 +1,9 @@
-import type { WidgetMessage, WidgetMessageSender } from '@/lib/contracts/widget';
+import type {
+  WidgetChatError,
+  WidgetMessage,
+  WidgetMessageDelta,
+  WidgetMessageSender,
+} from '@/lib/contracts/widget';
 
 import { type ChatTransport, type ConnectionStatus, Emitter } from './chat-transport';
 
@@ -6,7 +11,7 @@ const STATIC_REPLIES: readonly [string, ...string[]] = [
   'Thanks for your message. Let me look into that for you.',
   'Good question! Here is a **quick summary**:\n\n- Point one\n- Point two\n- Point three',
   'I have noted that down. Is there anything else you need?',
-  'You can find more details in our documentation.',
+  'You can find more details in our [documentation](https://example.com).',
 ];
 
 const buildMessage = (sender: WidgetMessageSender, text: string): WidgetMessage => ({
@@ -18,8 +23,10 @@ const buildMessage = (sender: WidgetMessageSender, text: string): WidgetMessage 
 
 export class MockChatTransport implements ChatTransport {
   private readonly messages = new Emitter<WidgetMessage>();
+  private readonly deltas = new Emitter<WidgetMessageDelta>();
   private readonly typing = new Emitter<boolean>();
   private readonly status = new Emitter<ConnectionStatus>();
+  private readonly errors = new Emitter<WidgetChatError>();
   private timers: ReturnType<typeof setTimeout>[] = [];
   private replyIndex = 0;
 
@@ -38,6 +45,10 @@ export class MockChatTransport implements ChatTransport {
     this.status.emit('disconnected');
   }
 
+  loadHistory(): Promise<WidgetMessage[]> {
+    return Promise.resolve([]);
+  }
+
   sendMessage(): void {
     this.typing.emit(true);
     this.timers.push(
@@ -54,11 +65,19 @@ export class MockChatTransport implements ChatTransport {
     return this.messages.subscribe(callback);
   }
 
+  onDelta(callback: (delta: WidgetMessageDelta) => void): () => void {
+    return this.deltas.subscribe(callback);
+  }
+
   onTyping(callback: (typing: boolean) => void): () => void {
     return this.typing.subscribe(callback);
   }
 
   onStatus(callback: (status: ConnectionStatus) => void): () => void {
     return this.status.subscribe(callback);
+  }
+
+  onError(callback: (error: WidgetChatError) => void): () => void {
+    return this.errors.subscribe(callback);
   }
 }

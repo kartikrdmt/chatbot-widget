@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { SocketIoAdapter } from './common/adapters/socket-io.adapter.js';
-import { WidgetSitesService } from './widget/widget-sites.service.js';
+import { SiteService } from './widget/site.service.js';
 
 try {
   process.loadEnvFile();
@@ -11,18 +11,19 @@ try {
 
 const corsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
   .split(',')
-  .map((origin) => origin.trim().toLowerCase())
+  .map((o) => o.trim().toLowerCase())
   .filter(Boolean);
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // The widget runs on the customers' own sites, so their origins are allowed
-  // too. Which key each origin may use is checked per request.
-  const sites = app.get(WidgetSitesService);
+  // Load per-site origins from MongoDB and merge with the static CORS list.
+  const sites = app.get(SiteService);
+  const siteOriginList = await sites.allOrigins();
   const siteOrigins = new Set(
-    sites.allOrigins().map((origin) => origin.toLowerCase()),
+    siteOriginList.map((o) => o.toLowerCase()),
   );
+
   const isOriginAllowed = (origin: string): boolean =>
     corsOrigins.includes('*') ||
     corsOrigins.includes(origin.toLowerCase()) ||

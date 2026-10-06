@@ -15,17 +15,21 @@ interface GeminiResponse {
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-/** Thin client for Gemini's `generateContent` REST endpoint. */
+/** Thin client for Gemini's generateContent and streamGenerateContent endpoints. */
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
 
-  async generate(systemPrompt: string, turns: GeminiTurn[]): Promise<string> {
+  async generate(
+    systemPrompt: string,
+    turns: GeminiTurn[],
+    model?: string,
+  ): Promise<string> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('GEMINI_API_KEY is not set.');
 
-    const model = process.env.GEMINI_MODEL || GEMINI_DEFAULT_MODEL;
-    const response = await fetch(`${ENDPOINT}/${model}:generateContent`, {
+    const resolvedModel = model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL;
+    const response = await fetch(`${ENDPOINT}/${resolvedModel}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
@@ -54,5 +58,65 @@ export class GeminiService {
 
     if (!text) throw new Error('Gemini returned an empty reply.');
     return text;
+  }
+
+  async *generateStream(
+    systemPrompt: string,
+    turns: GeminiTurn[],
+    model?: string,
+  ): AsyncGenerator<string> {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error('GEMINI_API_KEY is not set.');
+
+    const resolvedModel = model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL;
+    const response = await fetch(
+      `${ENDPOINT}/${resolvedModel}:streamGenerateContent?alt=sse`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: turns.map((turn) => ({
+            role: turn.role,
+            parts: [{ text: turn.text }],
+          })),
+        }),
+      },
+    );
+
+    if (!response.ok || !response.body) {
+      this.logger.error(`Gemini streaming returned ${response.status}`);
+      throw new Error(`Gemini stream request failed with ${response.status}.`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') return;
+        try {
+          const chunk = JSON.parse(data) as GeminiResponse;
+          const text = (chunk.candidates?.[0]?.content?.parts ?? [])
+            .filter((p) => !p.thought)
+            .map((p) => p.text ?? '')
+            .join('');
+          if (text) yield text;
+        } catch {
+          // Skip malformed SSE chunks.
+        }
+      }
+    }
   }
 }

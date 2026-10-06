@@ -13,12 +13,14 @@ interface ChatMessageListProps {
   messages: WidgetMessage[];
   typing: boolean;
   avatarText?: string;
+  showSources?: boolean;
 }
 
 export function ChatMessageList({
   messages,
   typing,
   avatarText,
+  showSources = true,
 }: ChatMessageListProps): React.ReactElement {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +47,7 @@ export function ChatMessageList({
               showAvatar={startsRun}
               showTime={endsRun}
               avatarText={avatarText}
+              showSources={showSources}
             />
           </div>
         );

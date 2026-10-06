@@ -1,27 +1,29 @@
 import {
   WIDGET_EVENTS,
   WIDGET_SOCKET_NAMESPACE,
-  type WidgetHistoryItem,
+  type WidgetChatError,
+  WidgetChatErrorSchema,
   type WidgetMessage,
+  type WidgetMessageDelta,
+  WidgetMessageDeltaSchema,
   WidgetMessageSchema,
-  type WidgetVisitorMessage,
 } from '@/lib/contracts/widget';
 import { io, type Socket } from 'socket.io-client';
 
 import { type ChatTransport, type ConnectionStatus, Emitter } from './chat-transport';
-import { getVisitorId } from './visitor-id';
 
 export class SocketChatTransport implements ChatTransport {
   private readonly socket: Socket;
   private readonly messages = new Emitter<WidgetMessage>();
+  private readonly deltas = new Emitter<WidgetMessageDelta>();
   private readonly typing = new Emitter<boolean>();
   private readonly status = new Emitter<ConnectionStatus>();
+  private readonly errors = new Emitter<WidgetChatError>();
 
-  constructor(widgetKey: string, apiUrl: string) {
+  constructor(sessionToken: string, apiUrl: string) {
     this.socket = io(`${apiUrl}${WIDGET_SOCKET_NAMESPACE}`, {
       autoConnect: false,
-      transports: ['websocket'],
-      auth: { key: widgetKey, visitorId: getVisitorId() },
+      auth: { sessionToken },
     });
 
     this.socket.on('connect', () => this.status.emit('connected'));
@@ -31,7 +33,15 @@ export class SocketChatTransport implements ChatTransport {
       const parsed = WidgetMessageSchema.safeParse(payload);
       if (parsed.success) this.messages.emit(parsed.data);
     });
+    this.socket.on(WIDGET_EVENTS.messageDelta, (payload: unknown) => {
+      const parsed = WidgetMessageDeltaSchema.safeParse(payload);
+      if (parsed.success) this.deltas.emit(parsed.data);
+    });
     this.socket.on(WIDGET_EVENTS.typing, (typing: boolean) => this.typing.emit(typing));
+    this.socket.on(WIDGET_EVENTS.error, (payload: unknown) => {
+      const parsed = WidgetChatErrorSchema.safeParse(payload);
+      if (parsed.success) this.errors.emit(parsed.data);
+    });
   }
 
   connect(): void {
@@ -43,13 +53,36 @@ export class SocketChatTransport implements ChatTransport {
     this.socket.disconnect();
   }
 
-  sendMessage(text: string, history: WidgetHistoryItem[]): void {
-    const payload: WidgetVisitorMessage = { text, history };
-    this.socket.emit(WIDGET_EVENTS.visitorMessage, payload);
+  loadHistory(): Promise<WidgetMessage[]> {
+    return new Promise((resolve) => {
+      this.socket.emit(
+        WIDGET_EVENTS.history,
+        {},
+        (response: unknown) => {
+          if (response && typeof response === 'object' && 'messages' in response) {
+            const messages = (response as { messages: unknown[] }).messages
+              .map((m) => WidgetMessageSchema.safeParse(m))
+              .filter((r) => r.success)
+              .map((r) => (r as { success: true; data: WidgetMessage }).data);
+            resolve(messages);
+          } else {
+            resolve([]);
+          }
+        },
+      );
+    });
+  }
+
+  sendMessage(text: string, clientMessageId: string): void {
+    this.socket.emit(WIDGET_EVENTS.visitorMessage, { text, clientMessageId });
   }
 
   onMessage(callback: (message: WidgetMessage) => void): () => void {
     return this.messages.subscribe(callback);
+  }
+
+  onDelta(callback: (delta: WidgetMessageDelta) => void): () => void {
+    return this.deltas.subscribe(callback);
   }
 
   onTyping(callback: (typing: boolean) => void): () => void {
@@ -58,5 +91,9 @@ export class SocketChatTransport implements ChatTransport {
 
   onStatus(callback: (status: ConnectionStatus) => void): () => void {
     return this.status.subscribe(callback);
+  }
+
+  onError(callback: (error: WidgetChatError) => void): () => void {
+    return this.errors.subscribe(callback);
   }
 }

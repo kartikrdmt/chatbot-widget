@@ -1,14 +1,17 @@
-import type { WidgetHistoryItem, WidgetMessage } from '@/lib/contracts/widget';
+import type { WidgetChatError, WidgetMessage, WidgetMessageDelta } from '@/lib/contracts/widget';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 
 export interface ChatTransport {
   connect(): void;
   disconnect(): void;
-  sendMessage(text: string, history: WidgetHistoryItem[]): void;
+  loadHistory(): Promise<WidgetMessage[]>;
+  sendMessage(text: string, clientMessageId: string): void;
   onMessage(callback: (message: WidgetMessage) => void): () => void;
+  onDelta(callback: (delta: WidgetMessageDelta) => void): () => void;
   onTyping(callback: (typing: boolean) => void): () => void;
   onStatus(callback: (status: ConnectionStatus) => void): () => void;
+  onError(callback: (error: WidgetChatError) => void): () => void;
 }
 
 export class Emitter<T> {
