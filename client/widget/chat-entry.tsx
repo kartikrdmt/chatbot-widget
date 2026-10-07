@@ -1,10 +1,10 @@
-import { WidgetConfigSchema } from '@myra/contracts';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { ChatWindow } from '@/components/chat-widget/chat-window';
 import { parseWidgetAppearance, type WidgetAppearanceOptions } from '@/lib/widget-appearance';
 
 import chatCss from './chat.generated.txt';
+import { parseConfig } from './parse-config';
 
 export interface MountChatOptions {
   shadow: ShadowRoot;
@@ -66,7 +66,7 @@ export function mountChat(options: MountChatOptions): ChatHandle {
   const render = (): void => {
     root.render(
       <ChatWindow
-        config={WidgetConfigSchema.parse(state.rawConfig)}
+        config={parseConfig(state.rawConfig)}
         sessionToken={state.sessionToken}
         apiUrl={options.apiUrl}
         appearance={appearance}
@@ -91,3 +91,7 @@ export function mountChat(options: MountChatOptions): ChatHandle {
     },
   };
 }
+
+(globalThis as unknown as Record<symbol, ChatModule>)[Symbol.for('myra-widget.chat')] = {
+  mountChat,
+};

@@ -65,6 +65,54 @@ describe('the widget reads leniently', () => {
   });
 });
 
+describe('one bad setting never stops the chat loading', () => {
+  it('falls back field by field for an invalid title, offset, position, size and feature', () => {
+    const config = WidgetConfigSchema.parse({
+      copy: { title: 'x'.repeat(200), greeting: 'Hello there' },
+      launcher: { offset: 9_999, position: 'nowhere', width: 'calc(100vw - 1px)', height: '500px' },
+      features: { streaming: 'yes', showSources: false },
+    });
+    expect(config.copy.title).toBe('How can we help?');
+    expect(config.copy.greeting).toBe('Hello there');
+    expect(config.launcher).toEqual({
+      position: 'bottom-right',
+      offset: 24,
+      width: '380px',
+      height: '500px',
+    });
+    expect(config.features).toEqual({ streaming: true, showSources: false });
+  });
+
+  it('falls back when a whole section is the wrong type', () => {
+    const config = WidgetConfigSchema.parse({
+      copy: 'oops',
+      launcher: 5,
+      features: null,
+      theme: [],
+    });
+    expect(config.copy.title).toBe('How can we help?');
+    expect(config.launcher.position).toBe('bottom-right');
+    expect(config.features).toEqual({ streaming: true, showSources: true });
+    expect(config.theme).toEqual({});
+  });
+
+  it('treats an unknown status as disabled, but a missing one as active', () => {
+    expect(WidgetConfigSchema.parse({ status: 'maybe' }).status).toBe('disabled');
+    expect(WidgetConfigSchema.parse({}).status).toBe('active');
+  });
+
+  it('keeps a good session and drops a broken one without failing', () => {
+    const good = { token: 't', expiresAt: '2099-01-01T00:00:00.000Z', expiresIn: 900 };
+    expect(WidgetConfigSchema.parse({ session: good }).session).toEqual(good);
+    expect(WidgetConfigSchema.parse({ session: { token: '' } }).session).toBeUndefined();
+  });
+
+  it('still refuses what is not an object at all (the chat then uses its defaults)', () => {
+    expect(WidgetConfigSchema.safeParse(null).success).toBe(false);
+    expect(WidgetConfigSchema.safeParse('x').success).toBe(false);
+  });
+});
+
 describe('visitor messages', () => {
   it('are capped', () => {
     const long = 'x'.repeat(WIDGET_LIMITS.maxMessageLength + 1);

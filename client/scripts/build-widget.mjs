@@ -37,14 +37,24 @@ const common = {
   logLevel: 'warning',
 };
 
+const defaultApiUrl = process.env.WIDGET_DEFAULT_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
+const production = process.argv.includes('--production') || process.env.NODE_ENV === 'production';
+if (!defaultApiUrl) {
+  const message =
+    'No default API address: set NEXT_PUBLIC_API_URL (or WIDGET_DEFAULT_API_URL). Without it a token-only snippet cannot work.';
+  if (production) {
+    console.error(`\n${message}`);
+    process.exit(1);
+  }
+  console.warn(`\nWarning: ${message}`);
+}
+
 const define = {
   'process.env.NODE_ENV': '"production"',
   'process.env.NEXT_PUBLIC_CHAT_TRANSPORT': JSON.stringify(
     process.env.NEXT_PUBLIC_CHAT_TRANSPORT ?? 'socket',
   ),
-  'process.env.WIDGET_DEFAULT_API_URL': JSON.stringify(
-    process.env.WIDGET_DEFAULT_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '',
-  ),
+  'process.env.WIDGET_DEFAULT_API_URL': JSON.stringify(defaultApiUrl),
 };
 
 const chatResult = await build({
@@ -61,15 +71,21 @@ const chatFile = Object.keys(chatResult.metafile.outputs)
   .find((name) => name?.startsWith('chat.') && name.endsWith('.js'));
 if (!chatFile) throw new Error('The chat bundle was not produced.');
 
+const sri = (file) => `sha384-${createHash('sha384').update(readFileSync(file)).digest('base64')}`;
+
 await build({
   ...common,
   entryPoints: ['widget/loader.ts'],
   outfile: `${work}/widget.js`,
   format: 'iife',
-  define: { ...define, __MYRA_CHAT_PATH__: JSON.stringify(`/v${version}/${chatFile}`) },
+  define: {
+    ...define,
+    __MYRA_VERSION__: JSON.stringify(version),
+    __MYRA_CHAT_FILE__: JSON.stringify(chatFile),
+    __MYRA_CHAT_INTEGRITY__: JSON.stringify(sri(`${work}/${chatFile}`)),
+  },
 });
 
-const sri = (file) => `sha384-${createHash('sha384').update(readFileSync(file)).digest('base64')}`;
 const versionDir = `public/v${version}`;
 rmSync(versionDir, { recursive: true, force: true });
 mkdirSync(versionDir, { recursive: true });

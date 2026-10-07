@@ -45,8 +45,11 @@ and so on) that you give them. Nothing is hard-coded to one brand.
 - **Site token vs secret key.** The token (`st_…`) goes in the page and is not a secret. Each site
   also gets a secret key (`sk_…`), shown once when it is created or rotated; only a hash is kept.
 - **Session.** The widget gets a 15-minute signed session from the server. It carries the tenant,
-  site, visitor and website, and is renewed automatically. A token copied to another website
-  doesn't work.
+  site, visitor and website, and is renewed automatically, in place: the live connection stays open
+  and just tells the server about the new session (`session:refresh`), so a reply being written at
+  that moment is not cut off. If a renewal fails (offline, server busy) it keeps retrying with a
+  growing pause of up to 5 minutes, and tries again at once when the network returns or the tab
+  becomes visible. A token copied to another website doesn't work.
 
 ## Running it on your computer
 
@@ -120,17 +123,15 @@ still there.
 Paste this just before `</body>`:
 
 ```html
-<script
-  src="https://YOUR-WIDGET-DOMAIN/widget.js"
-  data-site-token="st_your_site_token"
-  data-api-url="https://YOUR-API-DOMAIN"
-  data-title="Myra Technolabs"
-  data-subtitle="AI assistant"
-  data-accent-color="#162E56"
-></script>
+<script src="https://YOUR-WIDGET-DOMAIN/widget.js" data-site-token="st_your_site_token"></script>
 ```
 
-Only `data-site-token` is required (and `data-api-url` unless the widget was built with a default API address). Everything else is optional.
+That is the whole snippet. The title, texts, colours and position come from the site's settings on
+the server. Add `data-api-url="https://YOUR-API-DOMAIN"` only if the widget was not built with a
+default API address.
+
+Every other attribute below is an optional developer override: it beats the server's setting for that
+page only.
 
 | Attribute | What it does |
 | --- | --- |

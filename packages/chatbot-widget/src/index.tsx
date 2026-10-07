@@ -65,7 +65,7 @@ const scriptLoads = new Map<string, Promise<MyraWidgetApi>>();
 function loadWidgetScript(widgetUrl: string): Promise<MyraWidgetApi> {
   if (window.MyraWidget?.init) return Promise.resolve(window.MyraWidget);
 
-  const src = `${widgetUrl.replace(/\/+$/, '')}/widget.js`;
+  const src = `${widgetUrl.replace(/\/+$/, '')}/v1/widget.js`;
   let load = scriptLoads.get(src);
   if (!load) {
     load = new Promise<MyraWidgetApi>((resolve, reject) => {

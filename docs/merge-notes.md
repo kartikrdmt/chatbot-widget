@@ -73,6 +73,18 @@ Widget dependencies to add to `apps/web`: `esbuild`, `@tailwindcss/cli`, `react-
   `monthlyMessageLimit` and `status`; `ensureTenant` creates one on first use. Move this to
   wherever myra-ai keeps companies.
 
+## Contract and protocol changes you will see in the diff
+
+- `WidgetSession` gains `expiresIn` (seconds), so the widget schedules renewal from the session's
+  lifetime and never compares the server's clock with its own.
+- A new socket event, `session:refresh` (client to server, with an acknowledgement), swaps a live
+  connection's session for a newer one of the same visitor, site and website. Anything else is refused.
+- Each streamed `chat:message:delta` carries a `seq`, so the widget drops repeats and late pieces.
+- The config schemas now fall back field by field (`.catch(default)`), so one bad stored value can no
+  longer stop the chat opening. The admin API keeps the strict `*InputSchema` versions.
+- The chat file is loaded with a `<script type="module" integrity=…>` whose hash is baked into the
+  loader at build time, and resolved against the loader's own URL, so it can be hosted under a sub-path.
+
 ## How to check it still works
 
 ```bash

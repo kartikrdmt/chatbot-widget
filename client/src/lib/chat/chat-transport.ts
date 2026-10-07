@@ -5,6 +5,8 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 export interface ChatTransport {
   connect(): void;
   disconnect(): void;
+  /** Use a renewed session without dropping the connection (and any reply streaming on it). */
+  setSessionToken(sessionToken: string): void;
   loadHistory(): Promise<WidgetMessage[]>;
   sendMessage(text: string, clientMessageId: string): void;
   onMessage(callback: (message: WidgetMessage) => void): () => void;

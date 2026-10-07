@@ -11,9 +11,14 @@ import type { WidgetAppearanceOptions } from '@/lib/widget-appearance';
 
 import { floatingLayout, isPosition, panelOrigin, type Position, toCssSize } from './layout';
 import { LOADER_CSS } from './loader-styles';
-import type { ChatHandle, ChatModule } from './chat-entry';
+import type { ChatHandle } from './chat-entry';
+import { loadChatModule } from './chat-loader';
+import { resolveChatUrl } from './chat-url';
+import { isRenewalDue, lifetimeOf, renewalDelay, retryDelay } from './renewal';
 
-declare const __MYRA_CHAT_PATH__: string;
+declare const __MYRA_VERSION__: string;
+declare const __MYRA_CHAT_FILE__: string;
+declare const __MYRA_CHAT_INTEGRITY__: string;
 
 export interface InitOptions extends WidgetAppearanceOptions {
   siteToken?: string;
@@ -37,7 +42,9 @@ interface LoaderConfig {
   status: 'active' | 'disabled';
   siteId: string;
   token: string;
-  expiresAt: string;
+  /** Seconds the session lives, and when it arrived (this device's clock). */
+  lifetimeSeconds: number;
+  receivedAt: number;
   visitorId?: string;
   theme: ThemeValues;
   position?: Position;
@@ -49,7 +56,6 @@ interface LoaderConfig {
 const DEFAULT_OFFSET = 24;
 
 const DEFAULT_API_URL = (process.env.WIDGET_DEFAULT_API_URL ?? '').replace(/\/+$/, '');
-
 
 const warn = (reason: string): null => {
   console.warn(`[Myra widget] Not shown: ${reason}`);
@@ -137,10 +143,17 @@ const SVG_OPEN = '<svg viewBox="0 0 24 24" aria-hidden="true">';
 const ICON_CHAT = `${SVG_OPEN}<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg>`;
 const ICON_CLOSE = `${SVG_OPEN}<path d="m6 9 6 6 6-6"/></svg>`;
 
+/** `'gone'`: the site is unknown, not allowed or disabled, so retrying cannot help. `null`: try again. */
+type FetchResult = LoaderConfig | 'gone' | null;
 
-async function fetchConfig(apiUrl: string, siteToken: string): Promise<LoaderConfig | null> {
+async function fetchConfig(apiUrl: string, siteToken: string, quiet = false): Promise<FetchResult> {
+  const say = (reason: string): null => (quiet ? null : warn(reason));
+  const gone = (reason: string): 'gone' => {
+    warn(reason);
+    return 'gone';
+  };
   if (!apiUrl) {
-    return warn('no API URL. Add data-api-url="https://your-api.example.com" to the script tag.');
+    return gone('no API URL. Add data-api-url="https://your-api.example.com" to the script tag.');
   }
   try {
     const visitorId = storage.read(localStorage, visitorKey(siteToken));
@@ -150,29 +163,29 @@ async function fetchConfig(apiUrl: string, siteToken: string): Promise<LoaderCon
       }`,
     );
     if (response.status === 404)
-      return warn(`the site token "${siteToken}" is not known to the server.`);
+      return gone(`the site token "${siteToken}" is not known to the server.`);
     if (response.status === 403)
-      return warn(`this website is not allowed for the token "${siteToken}".`);
-    if (!response.ok) return warn(`the server answered ${response.status}.`);
+      return gone(`this website is not allowed for the token "${siteToken}".`);
+    if (!response.ok) return say(`the server answered ${response.status}.`);
 
+    const receivedAt = Date.now();
     const raw = (await response.json()) as Record<string, unknown>;
     const session = (raw.session ?? {}) as Record<string, unknown>;
     const launcher = (raw.launcher ?? {}) as Record<string, unknown>;
-    const status = raw.status === 'disabled' ? 'disabled' : 'active';
-    if (status === 'disabled')
-      return warn('the chat is disabled for this site (status: "disabled").');
-    if (!asString(session.token) || !asString(session.expiresAt))
-      return warn('the server sent no session.');
+    if (raw.status === 'disabled')
+      return gone('the chat is disabled for this site (status: "disabled").');
+    if (!asString(session.token)) return say('the server sent no session.');
 
     const newVisitorId = asString(raw.visitorId);
     if (newVisitorId) storage.write(localStorage, visitorKey(siteToken), newVisitorId);
 
     return {
       raw,
-      status,
+      status: 'active',
       siteId: asString(raw.siteId) ?? 'site',
       token: session.token as string,
-      expiresAt: session.expiresAt as string,
+      lifetimeSeconds: lifetimeOf(session, receivedAt),
+      receivedAt,
       visitorId: newVisitorId,
       theme: sanitizeTheme(raw.theme),
       position: isPosition(launcher.position) ? launcher.position : undefined,
@@ -187,16 +200,25 @@ async function fetchConfig(apiUrl: string, siteToken: string): Promise<LoaderCon
           : undefined,
     };
   } catch {
-    return warn(
+    return say(
       `could not reach the API at ${apiUrl}. Check that the server is running and that this website is on its allowed list.`,
     );
   }
 }
 
-const chatUrl = (scriptOrigin: string): string => `${scriptOrigin}${__MYRA_CHAT_PATH__}`;
+function init(
+  options: InitOptions,
+  scriptUrl: string,
+  onDestroy?: () => void,
+): WidgetInstance | null {
+  const chatSrc = resolveChatUrl(scriptUrl, __MYRA_VERSION__, __MYRA_CHAT_FILE__);
+  if (!chatSrc) {
+    console.warn(
+      "[Myra widget] Not loaded: it could not tell where it was loaded from, so it won't fetch the chat file from anywhere else.",
+    );
+    return null;
+  }
 
-
-function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null {
   const siteToken = options.siteToken ?? options.key ?? '';
   const apiUrl = (options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, '');
   const inlineHost =
@@ -233,13 +255,14 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
   let expanded = false;
   let renewTimer: ReturnType<typeof setTimeout> | undefined;
   let lastRefreshAt = 0;
+  let refreshing = false;
+  let failures = 0;
   let pendingOpen: boolean | null = null;
 
   let position: Position = 'bottom-right';
   let offset = DEFAULT_OFFSET;
   let width = '380px';
   let height = '600px';
-
 
   const layout = () => floatingLayout({ position, offset, width, height, expanded });
 
@@ -262,7 +285,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     }
   };
 
-
   const showStatus = (html: string): void => {
     if (mount) mount.innerHTML = html;
   };
@@ -272,7 +294,7 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     if (chatLoading) return chatLoading;
     showStatus('<div class="myra-status"><div class="myra-dots"><i></i><i></i><i></i></div></div>');
 
-    chatLoading = (import(/* @vite-ignore */ chatUrl(scriptOrigin)) as Promise<ChatModule>)
+    chatLoading = loadChatModule(chatSrc, __MYRA_CHAT_INTEGRITY__)
       .then((module) => {
         if (destroyed || !shadow || !mount || !config) return;
         mount.innerHTML = '';
@@ -295,8 +317,11 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
           onDisabled: () => destroy(),
         });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         chatLoading = null;
+        console.warn(
+          `[Myra widget] ${error instanceof Error ? error.message : 'The chat could not be loaded.'}`,
+        );
         showStatus(
           '<div class="myra-status"><div>The chat could not be loaded.<br><button type="button">Try again</button></div></div>',
         );
@@ -304,7 +329,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
       });
     return chatLoading;
   };
-
 
   const setOpen = (next: boolean): void => {
     if (destroyed || inline || !config) return;
@@ -319,31 +343,44 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     }
   };
 
-
-  const refreshSession = (attempt = 0, scheduled = false): void => {
-    if (destroyed) return;
-    if (!scheduled && attempt === 0 && Date.now() - lastRefreshAt < 10_000) return;
+  const refreshSession = (scheduled = false): void => {
+    if (destroyed || refreshing) return;
+    // Several expiry signals can arrive together; one refresh is enough. The timer and a retry
+    // are exempt.
+    if (!scheduled && failures === 0 && Date.now() - lastRefreshAt < 10_000) return;
+    refreshing = true;
     lastRefreshAt = Date.now();
-    void fetchConfig(apiUrl, siteToken).then((fresh) => {
+    void fetchConfig(apiUrl, siteToken, true).then((fresh) => {
+      refreshing = false;
       if (destroyed) return;
-      if (fresh) {
+      if (fresh === 'gone') {
+        destroy();
+      } else if (fresh) {
+        failures = 0;
         config = fresh;
         chat?.update({ sessionToken: fresh.token, rawConfig: fresh.raw });
         scheduleRenewal();
-      } else if (attempt < 3) {
+      } else {
+        failures += 1;
         clearTimeout(renewTimer);
-        renewTimer = setTimeout(() => refreshSession(attempt + 1), 30_000 * (attempt + 1));
+        renewTimer = setTimeout(() => refreshSession(true), retryDelay(failures));
       }
     });
   };
 
   const scheduleRenewal = (): void => {
     clearTimeout(renewTimer);
-    if (!config?.expiresAt) return;
-    const renewIn = Math.max(5_000, new Date(config.expiresAt).getTime() - Date.now() - 60_000);
-    renewTimer = setTimeout(() => refreshSession(0, true), renewIn);
+    if (!config) return;
+    renewTimer = setTimeout(() => refreshSession(true), renewalDelay(config.lifetimeSeconds));
   };
 
+  /** Back online, or the tab is visible again: renew now if the session is due or a retry is pending. */
+  const wakeUp = (): void => {
+    if (destroyed || document.hidden || !config) return;
+    if (failures > 0 || isRenewalDue(config.receivedAt, config.lifetimeSeconds, Date.now())) {
+      refreshSession(true);
+    }
+  };
 
   const build = (loaded: LoaderConfig): void => {
     if (destroyed) return;
@@ -415,6 +452,8 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     (inlineHost ?? document.body).appendChild(host);
 
     scheduleRenewal();
+    window.addEventListener('online', wakeUp);
+    document.addEventListener('visibilitychange', wakeUp);
     if (pendingOpen !== null) {
       const requested = pendingOpen;
       pendingOpen = null;
@@ -427,15 +466,23 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
   const destroy = (): void => {
     destroyed = true;
     clearTimeout(renewTimer);
+    window.removeEventListener('online', wakeUp);
+    document.removeEventListener('visibilitychange', wakeUp);
     chat?.unmount();
     chat = null;
     host?.remove();
     host = null;
+    // The last widget on the page takes its page-level extras (font, Tailwind @property) with it.
+    if (!document.querySelector('[data-myra-widget]')) {
+      document.getElementById('myra-widget-properties')?.remove();
+      document.querySelectorAll('link[id^="myra-font-"]').forEach((link) => link.remove());
+    }
+    onDestroy?.();
   };
 
   const start = (): void => {
     void fetchConfig(apiUrl, siteToken).then((loaded) => {
-      if (loaded) build(loaded);
+      if (loaded && loaded !== 'gone') build(loaded);
     });
   };
 
@@ -448,7 +495,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     destroy,
   };
 }
-
 
 const ATTRIBUTES: Record<string, keyof InitOptions> = {
   'data-site-token': 'siteToken',
@@ -491,12 +537,14 @@ const script =
   document.querySelector('script[src*="widget.js"][data-key]');
 
 if (!window.MyraWidget) {
-  const scriptOrigin = script instanceof HTMLScriptElement ? new URL(script.src).origin : '';
+  const scriptUrl = script instanceof HTMLScriptElement ? script.src : '';
   let current: WidgetInstance | null = null;
 
   window.MyraWidget = {
     init: (options = {}) => {
-      const instance = init(options, scriptOrigin);
+      const instance: WidgetInstance | null = init(options, scriptUrl, () => {
+        if (current === instance) current = null;
+      });
       if (instance) current = instance;
       return instance;
     },

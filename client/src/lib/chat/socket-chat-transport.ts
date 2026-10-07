@@ -12,6 +12,10 @@ import { io, type Socket } from 'socket.io-client';
 
 import { type ChatTransport, type ConnectionStatus, Emitter } from './chat-transport';
 
+/** If the server does not answer in time, the chat starts with its greeting instead of waiting. */
+const HISTORY_TIMEOUT_MS = 10_000;
+const REFRESH_TIMEOUT_MS = 5_000;
+
 export class SocketChatTransport implements ChatTransport {
   private readonly socket: Socket;
   private readonly messages = new Emitter<WidgetMessage>();
@@ -20,10 +24,14 @@ export class SocketChatTransport implements ChatTransport {
   private readonly status = new Emitter<ConnectionStatus>();
   private readonly errors = new Emitter<WidgetChatError>();
 
+  private sessionToken: string;
+
   constructor(sessionToken: string, apiUrl: string) {
+    this.sessionToken = sessionToken;
     this.socket = io(`${apiUrl}${WIDGET_SOCKET_NAMESPACE}`, {
       autoConnect: false,
-      auth: { sessionToken },
+      // A function, so every (re)connect presents the newest token.
+      auth: (callback) => callback({ sessionToken: this.sessionToken }),
     });
 
     this.socket.on('connect', () => this.status.emit('connected'));
@@ -53,21 +61,44 @@ export class SocketChatTransport implements ChatTransport {
     this.socket.disconnect();
   }
 
+  setSessionToken(sessionToken: string): void {
+    this.sessionToken = sessionToken;
+    if (!this.socket.connected) return;
+
+    // Tell the live connection about its new session. If the server will not take it, reconnect so
+    // the new token is presented instead.
+    this.socket
+      .timeout(REFRESH_TIMEOUT_MS)
+      .emit(
+        WIDGET_EVENTS.session,
+        { sessionToken },
+        (error: unknown, response?: { ok?: boolean }) => {
+          if (error || !response?.ok) this.socket.disconnect().connect();
+        },
+      );
+  }
+
   loadHistory(): Promise<WidgetMessage[]> {
     return new Promise((resolve) => {
-      this.socket.emit(WIDGET_EVENTS.history, {}, (response: unknown) => {
-        const list = Array.isArray(response)
-          ? response
-          : response && typeof response === 'object' && 'messages' in response
-            ? (response as { messages: unknown }).messages
-            : [];
-        resolve(
-          (Array.isArray(list) ? list : [])
-            .map((m) => WidgetMessageSchema.safeParse(m))
-            .filter((r) => r.success)
-            .map((r) => (r as { success: true; data: WidgetMessage }).data),
-        );
-      });
+      this.socket
+        .timeout(HISTORY_TIMEOUT_MS)
+        .emit(WIDGET_EVENTS.history, {}, (error: unknown, response: unknown) => {
+          if (error) {
+            resolve([]);
+            return;
+          }
+          const list = Array.isArray(response)
+            ? response
+            : response && typeof response === 'object' && 'messages' in response
+              ? (response as { messages: unknown }).messages
+              : [];
+          resolve(
+            (Array.isArray(list) ? list : [])
+              .map((m) => WidgetMessageSchema.safeParse(m))
+              .filter((r) => r.success)
+              .map((r) => (r as { success: true; data: WidgetMessage }).data),
+          );
+        });
     });
   }
 

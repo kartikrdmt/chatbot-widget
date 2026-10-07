@@ -22,6 +22,7 @@ export const WIDGET_EVENTS = {
   typing: 'chat:typing',
   error: 'chat:error',
   history: 'conversation:history',
+  session: 'session:refresh',
 } as const;
 
 export const WIDGET_ERROR_CODES = [
@@ -100,12 +101,12 @@ export const WidgetCopyInputSchema = z
   .strict();
 
 export const WidgetCopySchema = z.object({
-  title: z.string().min(1).max(80).default('How can we help?'),
-  subtitle: z.string().max(120).optional(),
-  greeting: z.string().min(1).max(500).default(DEFAULT_GREETING),
-  placeholder: z.string().min(1).max(80).default('Write a message...'),
-  offlineMessage: z.string().min(1).max(200).default("We're offline right now."),
-  avatarText: z.string().min(1).max(2).optional(),
+  title: z.string().min(1).max(80).catch('How can we help?'),
+  subtitle: z.string().max(120).optional().catch(undefined),
+  greeting: z.string().min(1).max(500).catch(DEFAULT_GREETING),
+  placeholder: z.string().min(1).max(80).catch('Write a message...'),
+  offlineMessage: z.string().min(1).max(200).catch("We're offline right now."),
+  avatarText: z.string().min(1).max(2).optional().catch(undefined),
 });
 
 export const WidgetLauncherInputSchema = z
@@ -118,10 +119,10 @@ export const WidgetLauncherInputSchema = z
   .strict();
 
 export const WidgetLauncherSchema = z.object({
-  position: WidgetPositionSchema.default('bottom-right'),
-  offset: z.number().int().min(0).max(200).default(24),
-  width: z.string().default('380px'),
-  height: z.string().default('600px'),
+  position: WidgetPositionSchema.catch('bottom-right'),
+  offset: z.number().int().min(0).max(200).catch(24),
+  width: sizeField.catch('380px'),
+  height: sizeField.catch('600px'),
 });
 
 export const WidgetFeaturesInputSchema = z
@@ -132,8 +133,8 @@ export const WidgetFeaturesInputSchema = z
   .strict();
 
 export const WidgetFeaturesSchema = z.object({
-  streaming: z.boolean().default(true),
-  showSources: z.boolean().default(true),
+  streaming: z.boolean().catch(true),
+  showSources: z.boolean().catch(true),
 });
 
 export const SiteSettingsInputSchema = z
@@ -201,17 +202,18 @@ export const CreateSiteResponseSchema = SiteSchema.extend({ secretKey: z.string(
 export const WidgetSessionSchema = z.object({
   token: z.string().min(1),
   expiresAt: IsoDateTimeSchema,
+  expiresIn: z.number().int().positive().optional().catch(undefined),
 });
 
 export const WidgetConfigSchema = z.object({
-  status: SiteStatusSchema.default('active'),
-  siteId: z.string().min(1).default('local'),
-  session: WidgetSessionSchema.optional(),
-  visitorId: z.string().min(1).optional(),
-  copy: WidgetCopySchema.default({}),
-  theme: WidgetThemeSchema.default({}),
-  launcher: WidgetLauncherSchema.default({}),
-  features: WidgetFeaturesSchema.default({}),
+  status: SiteStatusSchema.default('active').catch('disabled'),
+  siteId: z.string().min(1).catch('local'),
+  session: WidgetSessionSchema.optional().catch(undefined),
+  visitorId: z.string().min(1).optional().catch(undefined),
+  copy: WidgetCopySchema.default({}).catch(() => WidgetCopySchema.parse({})),
+  theme: WidgetThemeSchema.default({}).catch(() => WidgetThemeSchema.parse({})),
+  launcher: WidgetLauncherSchema.default({}).catch(() => WidgetLauncherSchema.parse({})),
+  features: WidgetFeaturesSchema.default({}).catch(() => WidgetFeaturesSchema.parse({})),
 });
 
 export const WidgetAppearanceSchema = z.object({
@@ -248,6 +250,8 @@ export const WidgetMessageSchema = z.object({
 
 export const WidgetMessageDeltaSchema = z.object({
   id: z.string().min(1),
+  /** 0, 1, 2… for each piece of one reply, so the widget can drop repeats and late arrivals. */
+  seq: z.number().int().nonnegative().optional(),
   delta: z.string(),
   done: z.boolean().optional(),
 });
@@ -260,6 +264,10 @@ export const WidgetChatErrorSchema = z.object({
 export const WidgetVisitorMessageSchema = z.object({
   text: z.string().trim().min(1).max(WIDGET_LIMITS.maxMessageLength),
   clientMessageId: z.string().min(1).max(100),
+});
+
+export const WidgetSessionRefreshSchema = z.object({
+  sessionToken: z.string().min(1),
 });
 
 export const WidgetSocketAuthSchema = z.object({
@@ -290,6 +298,7 @@ export type WidgetMessageDelta = z.infer<typeof WidgetMessageDeltaSchema>;
 export type WidgetChatError = z.infer<typeof WidgetChatErrorSchema>;
 export type WidgetSource = z.infer<typeof WidgetSourceSchema>;
 export type WidgetVisitorMessage = z.input<typeof WidgetVisitorMessageSchema>;
+export type WidgetSessionRefresh = z.infer<typeof WidgetSessionRefreshSchema>;
 export type WidgetSocketAuth = z.infer<typeof WidgetSocketAuthSchema>;
 export type CreateSiteRequest = z.infer<typeof CreateSiteRequestSchema>;
 export type UpdateSiteRequest = z.infer<typeof UpdateSiteRequestSchema>;

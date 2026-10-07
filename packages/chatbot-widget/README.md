@@ -48,7 +48,9 @@ a server component such as `app/layout.tsx`.
 
 | Prop | What it controls |
 | --- | --- |
-| `siteToken`, `widgetUrl`, `apiUrl` | Required. Site token (`st_...`), where `widget.js` is hosted, API host |
+| `siteToken` | Required. The site's public token (`st_...`) |
+| `widgetUrl` | Where the widget is hosted. Needed unless `widget.js` is already loaded on the page. The package loads `<widgetUrl>/v1/widget.js`, the latest 1.x |
+| `apiUrl` | Optional. Defaults to the API address the widget was built with |
 | `position`, `offset`, `width`, `height`, `inline` | Placement and size (above) |
 | `title`, `subtitle`, `greeting`, `placeholder`, `avatarText` | Texts |
 | `accentColor` | Header, launcher, send button, your bubbles, bot avatar |

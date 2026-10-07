@@ -45,6 +45,8 @@ export class MockChatTransport implements ChatTransport {
     this.status.emit('disconnected');
   }
 
+  setSessionToken(): void {}
+
   loadHistory(): Promise<WidgetMessage[]> {
     return Promise.resolve([]);
   }

@@ -24,6 +24,7 @@ const safeHref = (href: string | undefined): string | undefined => {
 const urlTransform = (url: string): string => safeHref(url) ?? '';
 
 const MARKDOWN_COMPONENTS: Components = {
+  img: ({ alt }) => (alt ? <>{alt}</> : null),
   a: ({ node, href, children, ...props }) => {
     void node;
     const safe = safeHref(href);

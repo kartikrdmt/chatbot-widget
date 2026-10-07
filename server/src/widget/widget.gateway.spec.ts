@@ -455,3 +455,64 @@ describe('conversation history', () => {
     );
   });
 });
+
+describe('refreshing a live session', () => {
+  const NEWER = { ...SESSION };
+
+  it('accepts a newer session for the same visitor, and lets later messages through', async () => {
+    const t = setup();
+    t.session.expiresAtMs.mockReturnValue(Date.now() - 1_000);
+    const c = t.connected();
+
+    await t.send(c);
+    expect(t.errors(c)).toEqual([{ code: 'session_expired' }]);
+
+    t.session.verify.mockReturnValue(NEWER);
+    t.session.expiresAtMs.mockReturnValue(Date.now() + 60_000);
+    expect(
+      t.gateway.onSessionRefresh({ sessionToken: 'fresh' }, c.socket),
+    ).toEqual({ ok: true });
+
+    await t.send(c, 'the question', 'm2');
+    expect(t.answerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['another visitor', { ...SESSION, visitorId: 'v_other' }],
+    ['another site', { ...SESSION, siteId: 'site-2' }],
+    ['another company', { ...SESSION, tenantId: 'tenant-2' }],
+    ['another website', { ...SESSION, origin: 'https://evil.com' }],
+    ['an invalid or expired token', null],
+  ])('refuses a session for %s and keeps the old one', (_name, verified) => {
+    const t = setup();
+    const c = t.connected();
+    t.session.verify.mockReturnValue(verified);
+    expect(t.gateway.onSessionRefresh({ sessionToken: 'x' }, c.socket)).toEqual(
+      { ok: false },
+    );
+    expect((c.socket.data as Record<string, unknown>)['session']).toEqual(
+      SESSION,
+    );
+  });
+
+  it('refuses a refresh with no token, or from a connection with no session', () => {
+    const t = setup();
+    const c = t.connected();
+    expect(t.gateway.onSessionRefresh({}, c.socket)).toEqual({ ok: false });
+    expect(
+      t.gateway.onSessionRefresh({ sessionToken: 'x' }, t.client().socket),
+    ).toEqual({ ok: false });
+  });
+});
+
+describe('streamed pieces are numbered', () => {
+  it('counts 0, 1, 2… across the pieces and the closing marker of one reply', async () => {
+    const t = setup();
+    const c = t.connected();
+    await t.send(c);
+    const seqs = c.emitted
+      .filter((e) => e.event === 'chat:message:delta')
+      .map((e) => (e.payload as { seq: number }).seq);
+    expect(seqs).toEqual([0, 1, 2]);
+  });
+});

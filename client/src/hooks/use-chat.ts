@@ -4,6 +4,8 @@ import type { WidgetChatError, WidgetFeatures, WidgetMessage } from '@myra/contr
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { type ChatTransport, type ConnectionStatus, createChatTransport } from '@/lib/chat';
+import { DeltaGate } from '@/lib/chat/delta-gate';
+import { ReplaceableTimer } from '@/lib/chat/replaceable-timer';
 
 export interface ChatError {
   code: WidgetChatError['code'] | 'offline';
@@ -55,6 +57,9 @@ export function useChat({
   const awaitingReplyRef = useRef(false);
   const resendRef = useRef<{ text: string; clientMessageId: string } | null>(null);
   const offlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rateTimerRef = useRef(new ReplaceableTimer());
+  const deltaGateRef = useRef(new DeltaGate());
+  const sessionTokenRef = useRef(sessionToken);
 
   const onSessionExpiredRef = useRef(onSessionExpired);
   const onDisabledRef = useRef(onDisabled);
@@ -78,7 +83,13 @@ export function useChat({
   }, [features]);
 
   useEffect(() => {
-    const transport = createChatTransport(sessionToken, apiUrl);
+    sessionTokenRef.current = sessionToken;
+    transportRef.current?.setSessionToken(sessionToken);
+  }, [sessionToken]);
+
+  useEffect(() => {
+    const rateTimer = rateTimerRef.current;
+    const transport = createChatTransport(sessionTokenRef.current, apiUrl);
     transportRef.current = transport;
 
     const clearOfflineTimer = (): void => {
@@ -91,6 +102,7 @@ export function useChat({
     const unsubscribers = [
       transport.onMessage((message) => {
         if (message.sender !== 'visitor') awaitingReplyRef.current = false;
+        if (!message.streaming) deltaGateRef.current.finish(message.id);
         setMessages((prev) => {
           const idx = prev.findIndex((m) => m.id === message.id);
           if (idx >= 0) {
@@ -103,8 +115,9 @@ export function useChat({
         setTyping(false);
       }),
 
-      transport.onDelta(({ id, delta }) => {
+      transport.onDelta(({ id, seq, delta }) => {
         if (!featuresRef.current.streaming) return;
+        if (!deltaGateRef.current.accept(id, seq)) return;
         setMessages((prev) => {
           const idx = prev.findIndex((m) => m.id === id);
           if (idx >= 0) {
@@ -174,6 +187,7 @@ export function useChat({
       }),
 
       transport.onError((error) => {
+        rateTimer.clear();
         if (error.code === 'rate_limited') {
           const retryAfterMs = (error.retryAfter ?? 5) * 1000;
           const retryUntil = Date.now() + retryAfterMs;
@@ -182,7 +196,7 @@ export function useChat({
             message: "You're sending messages too quickly. Please wait a moment.",
             retryUntil,
           });
-          setTimeout(() => setChatError(null), retryAfterMs);
+          rateTimer.set(() => setChatError(null), retryAfterMs);
         } else if (error.code === 'quota_exceeded') {
           setChatError({ code: 'quota_exceeded', message: offlineMessageRef.current });
         } else if (error.code === 'disabled') {
@@ -198,11 +212,12 @@ export function useChat({
 
     return () => {
       clearOfflineTimer();
+      rateTimer.clear();
       unsubscribers.forEach((unsubscribe) => unsubscribe());
       transport.disconnect();
       transportRef.current = null;
     };
-  }, [sessionToken, apiUrl]);
+  }, [apiUrl]);
 
   const sendMessage = useCallback((text: string) => {
     const trimmed = text.trim();

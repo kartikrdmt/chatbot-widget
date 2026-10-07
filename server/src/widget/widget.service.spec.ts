@@ -68,7 +68,11 @@ describe('WidgetService.getConfigResponse', () => {
   });
 
   it('includes the session and visitor only when given', () => {
-    const session = { token: 't', expiresAt: '2099-01-01T00:00:00.000Z' };
+    const session = {
+      token: 't',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      expiresIn: 900,
+    };
     expect(service.getConfigResponse(site(), session, 'v_1')).toMatchObject({
       session,
       visitorId: 'v_1',

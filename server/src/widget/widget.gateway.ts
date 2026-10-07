@@ -19,6 +19,7 @@ import {
   WIDGET_EVENTS,
   WIDGET_LIMITS,
   WIDGET_SOCKET_NAMESPACE,
+  WidgetSessionRefreshSchema,
   WidgetSocketAuthSchema,
   WidgetVisitorMessageSchema,
 } from '@myra/contracts';
@@ -121,6 +122,36 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
         ),
       );
     });
+  }
+
+  /**
+   * Swaps a connection's session for a freshly issued one, without reconnecting, so a reply that is
+   * streaming at renewal time is not cut off. Only the same visitor on the same site and website
+   * may be refreshed; anything else is refused.
+   */
+  @SubscribeMessage(WIDGET_EVENTS.session)
+  onSessionRefresh(
+    @MessageBody() body: unknown,
+    @ConnectedSocket() client: Socket,
+  ): { ok: boolean } {
+    const current = this.getSession(client);
+    const parsed = WidgetSessionRefreshSchema.safeParse(body);
+    if (!current || !parsed.success) return { ok: false };
+
+    const next = this.session.verify(parsed.data.sessionToken);
+    const same =
+      next?.tenantId === current.tenantId &&
+      next.siteId === current.siteId &&
+      next.visitorId === current.visitorId &&
+      next.origin === current.origin;
+    if (!next || !same) return { ok: false };
+
+    const data = client.data as Record<string, unknown>;
+    data['session'] = next;
+    data['sessionExpiresAt'] = this.session.expiresAtMs(
+      parsed.data.sessionToken,
+    );
+    return { ok: true };
   }
 
   @SubscribeMessage(WIDGET_EVENTS.visitorMessage)
@@ -233,6 +264,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const messageId = randomUUID();
     const streaming = site.settings?.features?.streaming !== false;
     let fullText = '';
+    let seq = 0;
     let sources: WidgetSource[] = [];
 
     try {
@@ -260,6 +292,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
           if (streaming) {
             client.emit(WIDGET_EVENTS.messageDelta, {
               id: messageId,
+              seq: seq++,
               delta: event.text,
             });
           }
@@ -272,6 +305,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (streaming) {
         client.emit(WIDGET_EVENTS.messageDelta, {
           id: messageId,
+          seq: seq++,
           delta: '',
           done: true,
         });
