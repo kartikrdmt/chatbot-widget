@@ -9,11 +9,14 @@ import {
   TenantContextService,
 } from './common/services/tenant-context.service.js';
 import type { AppConfig } from './config/configuration.js';
+import { logLevels } from './config/log-levels.js';
 import { SiteService } from './widget/site.service.js';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: logLevels(process.env.LOG_LEVEL),
+  });
 
   const config = app.get(ConfigService<AppConfig, true>);
   const corsOrigins = config.get('corsOrigins', { infer: true });
