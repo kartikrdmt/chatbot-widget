@@ -20,42 +20,8 @@
       config. The optional attributes below are developer overrides.
     </p>
 
-    <!--
-      data-site-token          Site public token (st_…) — the only required attribute.
+    <!-- here async and data-api-url is optional -->
 
-      Optional overrides (take precedence over the server config):
-
-      data-api-url             Backend URL (for staging / self-hosting; omit for production)
-      data-position            bottom-right | bottom-left | bottom-center | top-right |
-                               top-left | top-center | left-center | right-center
-      data-offset              Gap in px between the widget and the screen edge
-      data-width / data-height Largest size of the chat window (px, or e.g. 90vw)
-      data-container           CSS selector (e.g. "#chat"): show the chat inside that
-                               element instead of floating
-
-      data-title               Header title
-      data-subtitle            Small line under the header title
-      data-greeting            First message the bot shows in a new chat
-      data-placeholder         Placeholder text in the message input
-      data-avatar-text         Letter(s) inside the bot avatar (max 2)
-
-      data-accent-color        Main brand colour
-      data-accent-text-color   Text/icon colour on top of the accent colour
-      data-background-color    Chat window and bot message bubble background
-      data-chat-background-color  Background of the messages area
-      data-text-color          Main text colour
-      data-muted-color         Secondary text: timestamps, "Today", placeholder
-      data-border-color        Borders and divider lines
-      data-radius              Corner style: square | rounded | pill
-      data-font                A Google Font name, e.g. Inter
-
-      Versions: /widget.js and /v1/widget.js always serve the latest 1.x. To pin a build, use
-      /v1.0.0/widget.js with an integrity="sha384-…" attribute and crossorigin="anonymous"; the
-      hash is in /v1.0.0/integrity.json.
-
-      Deprecated (accepted for one release, then removed):
-      data-key                 Old widget key — use data-site-token instead
-    -->
     <script
       src="http://localhost:3000/widget.js"
       data-site-token="st_demo"
