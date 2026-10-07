@@ -3,10 +3,6 @@ import {
   WIDGET_PLATFORM_RULES,
 } from '../widget.constants.js';
 
-/**
- * The order matters: fixed platform rules, then the customer's own instructions, then any retrieved
- * reference text clearly marked as untrusted data.
- */
 export function buildSystemPrompt(
   companyPrompt: string | undefined,
   reference = '',
@@ -16,7 +12,7 @@ export function buildSystemPrompt(
     `Company instructions: ${companyPrompt?.trim() || WIDGET_DEFAULT_COMPANY_PROMPT}`,
   ];
   if (reference.trim()) {
-    // A page could contain a literal "</reference>"; neutralise it so it cannot close the block early.
+    // Stops a page from closing the <reference> block early.
     const safe = reference.replaceAll(/<\/?reference>/gi, '');
     parts.push(`<reference>\n${safe}\n</reference>`);
   }

@@ -9,10 +9,6 @@ import {
 } from './schemas/conversation.schema.js';
 import { Message, type MessageDocument } from './schemas/message.schema.js';
 
-/**
- * Conversations and messages. Every query here is scoped to the tenant in context by
- * `tenantPlugin`; callers run inside `TenantContextService.run(tenantId, …)`.
- */
 @Injectable()
 export class ConversationService {
   constructor(
@@ -22,7 +18,6 @@ export class ConversationService {
     private readonly messageModel: Model<MessageDocument>,
   ) {}
 
-  /** The visitor's one conversation on this site, created on first use. */
   async findOrCreate(
     siteId: string,
     visitorId: string,
@@ -39,7 +34,7 @@ export class ConversationService {
         visitorId,
       });
     } catch (error) {
-      // Two messages racing to create the first conversation: the unique index lets one win.
+      // Two first messages can race: the unique index lets one create it and the other read it.
       const winner = await this.conversationModel
         .findOne({ visitorId, siteId: siteObjectId })
         .exec();
@@ -48,7 +43,6 @@ export class ConversationService {
     }
   }
 
-  /** The most recent `limit` messages, oldest first. */
   async getHistory(
     conversationId: Types.ObjectId,
     limit = 20,
@@ -79,7 +73,6 @@ export class ConversationService {
     });
   }
 
-  /** Returns true if a message with this clientMessageId already exists (dedup guard). */
   async isDuplicate(
     conversationId: Types.ObjectId,
     clientMessageId: string,

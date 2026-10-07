@@ -19,13 +19,9 @@ async function bootstrap(): Promise<void> {
   const corsOrigins = config.get('corsOrigins', { infer: true });
   const tenancy = config.get('tenancy', { infer: true });
 
-  // Hand the DI-managed context to the Mongoose plugin, which is registered on schemas at import
-  // time and so cannot inject it.
+  // The Mongoose plugin is registered at import time and can't be injected, so it is handed the context here.
   setAmbientTenantContext(app.get(TenantContextService));
 
-  // The widget runs on customers' own sites, so any origin listed on a site is allowed too (looked
-  // up with a short cache, so a new site needs no restart). Which token each origin may use is
-  // checked per request.
   const sites = app.get(SiteService);
   const isOriginAllowed = async (origin: string): Promise<boolean> =>
     corsOrigins.includes(origin.toLowerCase()) ||

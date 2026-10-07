@@ -21,7 +21,6 @@ import {
 } from './theme-vars';
 
 describe('the loader and the contracts agree on what is allowed', () => {
-  // The loader cannot import zod, so it repeats the rules. These tests are what keep it honest.
   it('use the same patterns', () => {
     expect(COLOR_PATTERN.source).toBe(CSS_COLOR.source);
     expect(SIZE_PATTERN.source).toBe(CSS_SIZE.source);

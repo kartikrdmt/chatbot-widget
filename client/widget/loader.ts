@@ -1,12 +1,4 @@
-/**
- * The loader: the only file a visitor downloads before they open the chat.
- *
- * It fetches the site's config, draws the launcher and the frame of the chat window (position,
- * colours, animations), remembers whether the chat was open, and keeps the session fresh. The chat
- * itself (React, Markdown, the socket) is a separate file that is loaded the first time the chat
- * opens. Nothing heavy may be imported here: no React, no zod. Keep it small; the build enforces a
- * size budget.
- */
+// Keep this file tiny: no React, no zod. The build fails if it grows past its size budget.
 import {
   type ThemeValues,
   FONT_PATTERN,
@@ -24,16 +16,13 @@ import type { ChatHandle, ChatModule } from './chat-entry';
 declare const __MYRA_CHAT_PATH__: string;
 
 export interface InitOptions extends WidgetAppearanceOptions {
-  /** The site's public token (`st_…`). */
   siteToken?: string;
-  /** Deprecated alias for `siteToken`. */
   key?: string;
   apiUrl?: string;
   position?: string;
   offset?: number | string;
   width?: number | string;
   height?: number | string;
-  /** A CSS selector or element. When set, the chat is drawn inside it instead of floating. */
   container?: string | Element | null;
 }
 
@@ -43,7 +32,6 @@ export interface WidgetInstance {
   destroy: () => void;
 }
 
-/** What the loader reads from the config response. The chat gets the whole response. */
 interface LoaderConfig {
   raw: unknown;
   status: 'active' | 'disabled';
@@ -60,12 +48,8 @@ interface LoaderConfig {
 
 const DEFAULT_OFFSET = 24;
 
-/** Baked in at build time (NEXT_PUBLIC_API_URL), so `data-api-url` is optional. */
 const DEFAULT_API_URL = (process.env.WIDGET_DEFAULT_API_URL ?? '').replace(/\/+$/, '');
 
-// ---------------------------------------------------------------------------------------------
-// Small helpers
-// ---------------------------------------------------------------------------------------------
 
 const warn = (reason: string): null => {
   console.warn(`[Myra widget] Not shown: ${reason}`);
@@ -86,16 +70,14 @@ const storage = {
   write: (store: Storage, key: string, value: string): void => {
     try {
       store.setItem(key, value);
-    } catch {
-      // Storage can be blocked; the widget just forgets between page loads.
-    }
+    } catch {}
   },
 };
 
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value ? value : undefined;
 
-/** Fonts must be loaded by the page: browsers ignore @font-face inside a shadow root. */
+// Browsers ignore @font-face inside a shadow root, so the font link goes in the page <head>.
 function injectFont(fontFamily: string): void {
   const id = `myra-font-${fontFamily.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   if (document.getElementById(id)) return;
@@ -122,7 +104,6 @@ const BOX_PROPERTIES = [
   'display',
 ] as const;
 
-/** Applies a layout (numbers are pixels) after clearing what the previous layout set. */
 function applyBox(element: HTMLElement, style: Record<string, string | number | undefined>): void {
   const target = element.style as unknown as Record<string, string>;
   for (const property of BOX_PROPERTIES) target[property] = '';
@@ -133,7 +114,6 @@ function applyBox(element: HTMLElement, style: Record<string, string | number | 
 }
 
 const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
-// A soft deceleration with no bounce: fast at first, then settling gently.
 const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 const SIZE_PROPERTIES = ['width', 'height', 'top', 'bottom', 'left', 'right', 'border-radius'];
@@ -143,10 +123,6 @@ const reducedMotion = (): boolean =>
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/**
- * Opening unfolds slowly and gently; closing is quicker so the chat gets out of the way.
- * `visibility` waits for the close animation to finish before hiding the panel.
- */
 function panelTransition(open: boolean, reduceMotion: boolean): string {
   if (reduceMotion) return 'opacity .15s linear, visibility 0s linear';
   return [
@@ -161,16 +137,12 @@ const SVG_OPEN = '<svg viewBox="0 0 24 24" aria-hidden="true">';
 const ICON_CHAT = `${SVG_OPEN}<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/></svg>`;
 const ICON_CLOSE = `${SVG_OPEN}<path d="m6 9 6 6 6-6"/></svg>`;
 
-// ---------------------------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------------------------
 
 async function fetchConfig(apiUrl: string, siteToken: string): Promise<LoaderConfig | null> {
   if (!apiUrl) {
     return warn('no API URL. Add data-api-url="https://your-api.example.com" to the script tag.');
   }
   try {
-    // Sending the stored visitor id lets the server resume the same conversation after a refresh.
     const visitorId = storage.read(localStorage, visitorKey(siteToken));
     const response = await fetch(
       `${apiUrl}/widget/config?token=${encodeURIComponent(siteToken)}${
@@ -221,12 +193,8 @@ async function fetchConfig(apiUrl: string, siteToken: string): Promise<LoaderCon
   }
 }
 
-/** Where the chat file lives: the same site that served this loader. */
 const chatUrl = (scriptOrigin: string): string => `${scriptOrigin}${__MYRA_CHAT_PATH__}`;
 
-// ---------------------------------------------------------------------------------------------
-// One widget on a page
-// ---------------------------------------------------------------------------------------------
 
 function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null {
   const siteToken = options.siteToken ?? options.key ?? '';
@@ -238,7 +206,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
   if (options.container && !inlineHost) return null;
   const inline = inlineHost !== null;
 
-  // Look overrides from data-* attributes / props. They win over what the server says.
   const overrides = sanitizeTheme({
     accent: options.accentColor,
     accentForeground: options.accentTextColor,
@@ -273,7 +240,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
   let width = '380px';
   let height = '600px';
 
-  // ---- layout -----------------------------------------------------------------------------
 
   const layout = () => floatingLayout({ position, offset, width, height, expanded });
 
@@ -296,7 +262,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     }
   };
 
-  // ---- the chat file ----------------------------------------------------------------------
 
   const showStatus = (html: string): void => {
     if (mount) mount.innerHTML = html;
@@ -340,7 +305,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     return chatLoading;
   };
 
-  // ---- open / close -----------------------------------------------------------------------
 
   const setOpen = (next: boolean): void => {
     if (destroyed || inline || !config) return;
@@ -355,12 +319,9 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     }
   };
 
-  // ---- session ----------------------------------------------------------------------------
 
-  /** Fetch a fresh session and hand it to the chat; retries a few times if the API is busy. */
   const refreshSession = (attempt = 0, scheduled = false): void => {
     if (destroyed) return;
-    // Several expiry signals can arrive together; one refresh is enough. The timer is exempt.
     if (!scheduled && attempt === 0 && Date.now() - lastRefreshAt < 10_000) return;
     lastRefreshAt = Date.now();
     void fetchConfig(apiUrl, siteToken).then((fresh) => {
@@ -376,7 +337,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     });
   };
 
-  /** Renew the session a minute before it expires, then again, for as long as the page is open. */
   const scheduleRenewal = (): void => {
     clearTimeout(renewTimer);
     if (!config?.expiresAt) return;
@@ -384,7 +344,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
     renewTimer = setTimeout(() => refreshSession(0, true), renewIn);
   };
 
-  // ---- mounting ---------------------------------------------------------------------------
 
   const build = (loaded: LoaderConfig): void => {
     if (destroyed) return;
@@ -403,8 +362,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
 
     host = document.createElement('div');
     host.setAttribute('data-myra-widget', '');
-    // An inline chat fills its container's width unless told otherwise; floating chats use the
-    // launcher size from the server.
     host.style.cssText = inline
       ? `display:block;max-width:100%;width:${toCssSize(options.width, '100%')};height:${height};`
       : 'all:initial;';
@@ -450,7 +407,6 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
       launcher.addEventListener('click', () => setOpen(!open));
       root.appendChild(launcher);
 
-      // A chat left open before a refresh comes back open, with no animation.
       open = storage.read(sessionStorage, openKey(loaded.siteId)) === '1';
       paint(false);
     }
@@ -487,18 +443,13 @@ function init(options: InitOptions, scriptOrigin: string): WidgetInstance | null
   else document.addEventListener('DOMContentLoaded', start, { once: true });
 
   return {
-    // Called before the config has arrived: remembered, and applied as soon as the widget exists.
     open: () => (config ? setOpen(true) : ((pendingOpen = true), undefined)),
     close: () => (config ? setOpen(false) : ((pendingOpen = false), undefined)),
     destroy,
   };
 }
 
-// ---------------------------------------------------------------------------------------------
-// The page-level API and the script tag
-// ---------------------------------------------------------------------------------------------
 
-// Script-tag attribute names → init option names
 const ATTRIBUTES: Record<string, keyof InitOptions> = {
   'data-site-token': 'siteToken',
   'data-key': 'key',
@@ -534,8 +485,6 @@ declare global {
   }
 }
 
-// currentScript is null when a tag manager or loader runs the script later, so fall back to
-// finding our own tag by either token attribute.
 const script =
   document.currentScript ??
   document.querySelector('script[src*="widget.js"][data-site-token]') ??
@@ -555,7 +504,6 @@ if (!window.MyraWidget) {
     close: () => current?.close(),
   };
 
-  // A tag with data-site-token (or legacy data-key) mounts itself automatically.
   if (
     script instanceof HTMLScriptElement &&
     (script.hasAttribute('data-site-token') || script.hasAttribute('data-key'))

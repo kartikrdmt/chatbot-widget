@@ -9,10 +9,6 @@ import {
 } from './answer-provider.js';
 import { buildSystemPrompt } from './prompt.js';
 
-/**
- * Asks Gemini directly. Retrieval (`RagService`) supplies reference text and source links; today it
- * finds nothing, so the answer comes from the prompt alone.
- */
 @Injectable()
 export class GeminiAnswerProvider implements AnswerProvider {
   constructor(

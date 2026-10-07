@@ -52,13 +52,10 @@ export function useChat({
 
   const transportRef = useRef<ChatTransport | null>(null);
   const lastSentRef = useRef<{ text: string; clientMessageId: string } | null>(null);
-  // True from sending a message until the assistant answers it.
   const awaitingReplyRef = useRef(false);
-  // A message the server refused because the session had expired, to resend once reconnected.
   const resendRef = useRef<{ text: string; clientMessageId: string } | null>(null);
   const offlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep callbacks in refs so transport effect doesn't re-run when they change
   const onSessionExpiredRef = useRef(onSessionExpired);
   const onDisabledRef = useRef(onDisabled);
   const greetingRef = useRef(greeting);
@@ -95,7 +92,6 @@ export function useChat({
       transport.onMessage((message) => {
         if (message.sender !== 'visitor') awaitingReplyRef.current = false;
         setMessages((prev) => {
-          // Replace a streaming partial with the final message
           const idx = prev.findIndex((m) => m.id === message.id);
           if (idx >= 0) {
             const next = [...prev];
@@ -144,8 +140,6 @@ export function useChat({
                 ? historyMessages
                 : [buildMessage('assistant', greetingRef.current)];
 
-            // After a session refresh, send the refused message again, once. If the server
-            // already has it as the visitor's latest message, there is nothing to resend.
             const pending = resendRef.current;
             resendRef.current = null;
             if (pending) {
@@ -170,8 +164,6 @@ export function useChat({
         }
 
         if (s === 'disconnected') {
-          // Show "Reconnecting…" in the UI immediately via status.
-          // After 30 seconds without reconnecting, show the offline message.
           if (!offlineTimerRef.current) {
             offlineTimerRef.current = setTimeout(() => {
               setChatError({ code: 'offline', message: offlineMessageRef.current });

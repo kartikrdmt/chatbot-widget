@@ -2,48 +2,31 @@ import { Injectable } from '@nestjs/common';
 
 import { RATE_LIMIT_WINDOW_MS } from './widget.constants.js';
 
-/** One thing to limit: a visitor, an IP address or a whole site. */
 export interface RateLimitScope {
-  /** Unique across kinds, such as `visitor:v_ab12` or `ip:203.0.113.7`. */
   key: string;
   perMinute: number;
-  /** Optional daily cap for this scope. */
   perDay?: number;
 }
 
 export interface RateLimitResult {
   allowed: boolean;
-  /** Seconds until the oldest in-window message ages out (rate_limited case). */
   retryAfter?: number;
-  /** True when a daily cap, not just the per-minute limit, is exhausted. */
   quotaExceeded?: boolean;
 }
 
 interface WindowEntry {
-  /** Unix ms of the messages inside the current sliding window. */
   timestamps: number[];
   dailyCount: number;
-  /** Unix ms when the daily counter resets. */
   dailyReset: number;
 }
 
 const DAY_MS = 24 * 60 * 60_000;
 
-/**
- * Sliding-window rate limiter, in memory.
- *
- * Every method is `async` on purpose: this is the seam for Redis. To run several API servers, keep
- * the same two methods and move `windows` into Redis (a sorted set per key: ZADD, then
- * ZREMRANGEBYSCORE and ZCARD for the window). No caller changes.
- */
+// Async on purpose: this is the seam for Redis. Move `windows` into Redis and no caller changes.
 @Injectable()
 export class RateLimitService {
   private readonly windows = new Map<string, WindowEntry>();
 
-  /**
-   * Checks every scope and, only if ALL of them have room, counts the message against each.
-   * A message turned away by one scope is not counted against the others.
-   */
   async checkAll(scopes: RateLimitScope[]): Promise<RateLimitResult> {
     const now = Date.now();
     const entries = scopes.map((scope) => ({
@@ -74,7 +57,6 @@ export class RateLimitService {
     return { allowed: true };
   }
 
-  /** The entry for a key with expired timestamps dropped and the daily counter rolled over. */
   private entryFor(key: string, now: number): WindowEntry {
     let entry = this.windows.get(key);
     if (!entry) {

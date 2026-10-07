@@ -56,7 +56,6 @@ export class SocketChatTransport implements ChatTransport {
   loadHistory(): Promise<WidgetMessage[]> {
     return new Promise((resolve) => {
       this.socket.emit(WIDGET_EVENTS.history, {}, (response: unknown) => {
-        // The server answers with the list itself; an object with `messages` is accepted too.
         const list = Array.isArray(response)
           ? response
           : response && typeof response === 'object' && 'messages' in response

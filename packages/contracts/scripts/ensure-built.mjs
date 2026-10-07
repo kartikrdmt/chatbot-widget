@@ -1,5 +1,3 @@
-// Builds the package only when dist/ is missing or older than src/, so `npm test`, `npm run dev`
-// and friends in the apps never run against a stale or absent @myra/contracts.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';

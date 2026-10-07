@@ -12,8 +12,6 @@ export default function HomePage(): React.ReactElement {
         to start a conversation.
       </p>
 
-      {/* The same tag a customer pastes: just the token. The look and texts come from this site's
-          settings in the database (see /admin/sites). */}
       <Script
         src="/widget.js"
         strategy="afterInteractive"

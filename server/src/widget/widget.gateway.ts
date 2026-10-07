@@ -38,13 +38,11 @@ import { UsageService } from './usage.service.js';
 import { WIDGET_ERROR_REPLY } from './widget.constants.js';
 import { WidgetService } from './widget.service.js';
 
-/** Used for a tenant that has no record (or no limit set) yet. */
 const DEFAULT_MONTHLY_LIMIT = 1_000;
 
 @WebSocketGateway({ namespace: WIDGET_SOCKET_NAMESPACE })
 export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(WidgetGateway.name);
-  /** Open connections per IP address. */
   private readonly connectionsByIp = new Map<string, number>();
 
   constructor(
@@ -68,14 +66,11 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const payload = this.session.verify(auth.data.sessionToken);
     if (!payload) {
-      // Tell the widget why, so it can fetch a fresh session instead of retrying this one.
       this.reject(client, 'session_expired');
       client.disconnect(true);
       return;
     }
 
-    // Browsers always send Origin on socket connections. Callers without one are refused, and so
-    // is a token used from a different website than the one it was issued to.
     const origin = client.handshake.headers.origin;
     if (!origin || origin !== payload.origin) {
       client.disconnect(true);
@@ -105,7 +100,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     else this.connectionsByIp.delete(ip);
   }
 
-  /** Ack handler: client sends an empty body and receives the history array. */
   @SubscribeMessage(WIDGET_EVENTS.history)
   async onConversationHistory(
     @ConnectedSocket() client: Socket,
@@ -137,8 +131,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const session = this.getSession(client);
     if (!session) return;
 
-    // A connection can outlive its 15-minute token. Refuse the message without saving it, so the
-    // widget can refresh the session and resend the same message.
     const expiresAt = (client.data as Record<string, unknown>)[
       'sessionExpiresAt'
     ];
@@ -150,7 +142,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const parsed = WidgetVisitorMessageSchema.safeParse(body);
     if (!parsed.success) return;
 
-    // Everything below runs for this session's tenant, and only that tenant.
     await this.tenantContext.run(session.tenantId, () =>
       this.handleVisitorMessage(parsed.data, client, session),
     );
@@ -164,7 +155,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const site = await this.sites.findById(session.siteId);
     if (!site) return;
 
-    // The emergency switch applies to chats already open, not just new ones.
     const tenant = await this.sites.findTenant(session.tenantId);
     if (site.status === 'disabled' || tenant?.status === 'disabled') {
       this.reject(client, 'disabled');
@@ -176,7 +166,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       session.visitorId,
     );
 
-    // A message the client sends again (after a reconnect) is not counted or answered twice.
     if (
       await this.conversations.isDuplicate(
         conversation._id,
@@ -185,7 +174,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     )
       return;
 
-    // Limits come BEFORE anything that costs money: the model call.
     const settings = site.settings ?? {};
     const scopes: RateLimitScope[] = [
       {
@@ -233,7 +221,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
     await this.usage.recordMessage(session.siteId);
 
-    // The model sees the last few messages (not including the one just saved).
     const history = await this.conversations.getHistory(
       conversation._id,
       WIDGET_LIMITS.historyTurns + 1,
@@ -250,7 +237,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       if (streaming) {
-        // An empty placeholder first, so the widget shows its typing dots in the reply's place.
         client.emit(WIDGET_EVENTS.message, {
           id: messageId,
           sender: 'assistant',
@@ -290,7 +276,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
           done: true,
         });
       }
-      // The authoritative final message replaces the streamed partial (same id), with its sources.
       const finalMessage = this.widget.buildMessage(
         'assistant',
         fullText,
@@ -312,10 +297,8 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
         'assistant',
         WIDGET_ERROR_REPLY,
       );
-      // Reuse the id so it replaces the empty streaming bubble instead of sitting beside it.
       fallback.id = messageId;
       client.emit(WIDGET_EVENTS.message, fallback);
-      // Persist the apology too, so a refresh shows what the visitor saw.
       await this.conversations.saveMessage(
         conversation,
         'assistant',
@@ -342,7 +325,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       SessionPayload | undefined;
   }
 
-  /** The visitor's address. Behind a proxy (`TRUST_PROXY=true`) it is the first X-Forwarded-For. */
   private clientIp(client: Socket): string {
     if (this.config.get('trustProxy', { infer: true })) {
       const forwarded = client.handshake.headers['x-forwarded-for'];

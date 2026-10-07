@@ -40,7 +40,6 @@ describe('RateLimitService', () => {
     ]);
     expect(blocked.allowed).toBe(false);
 
-    // The visitor was not charged for the message the IP limit refused.
     for (let i = 0; i < 5; i++) {
       expect(
         (await limiter.checkAll([{ key: 'visitor:a', perMinute: 5 }])).allowed,

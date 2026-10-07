@@ -20,10 +20,8 @@ import {
 } from '../widget/schemas/site.schema.js';
 import { SiteService } from '../widget/site.service.js';
 
-/** Sections whose individual keys are merged by PATCH; everything else is replaced. */
 const SECTIONS = ['theme', 'copy', 'launcher', 'features'] as const;
 
-/** PATCH semantics: a section the admin sends is merged key by key, other values are replaced. */
 export function mergeSettings(
   current: SiteSettingsInput,
   patch: SiteSettingsInput,
@@ -39,7 +37,6 @@ export function mergeSettings(
 export const hashSecret = (secret: string): string =>
   createHash('sha256').update(secret).digest('hex');
 
-/** Admin operations on the sites of the tenant in context. */
 @Injectable()
 export class AdminSitesService {
   constructor(
@@ -87,7 +84,6 @@ export class AdminSitesService {
     return this.toContract(site);
   }
 
-  /** `merge: true` for PATCH, `false` for PUT (replace everything). */
   async saveSettings(
     id: string,
     settings: SiteSettingsInput,
@@ -102,7 +98,6 @@ export class AdminSitesService {
     return this.toContract(site);
   }
 
-  /** Issues a new secret key and invalidates the old one. The key is returned this once. */
   async rotateSecret(id: string): Promise<CreateSiteResponse> {
     const site = await this.require(id);
     const secretKey = this.newSecretKey();
@@ -111,7 +106,6 @@ export class AdminSitesService {
     return { ...this.toContract(site), secretKey };
   }
 
-  /** True when `secretKey` is the current secret of the site with this public token. */
   async verifySecretKey(
     publicToken: string,
     secretKey: string,
@@ -130,7 +124,6 @@ export class AdminSitesService {
     return `sk_${randomBytes(24).toString('base64url')}`;
   }
 
-  /** Scoped to the tenant in context, so another tenant's site is simply "not found". */
   private async require(id: string): Promise<SiteDocument> {
     if (!isValidObjectId(id)) throw new NotFoundException('Unknown site.');
     const site = await this.siteModel.findById(id).exec();

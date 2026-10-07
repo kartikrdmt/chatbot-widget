@@ -2,7 +2,6 @@ import { Types } from 'mongoose';
 
 import { dayOf, UsageService } from './usage.service.js';
 
-/** In-memory stand-in for the usage model: `updateOne` with `$inc`/upsert, and a date-filtered `find`. */
 function fakeModel() {
   const docs: { siteId: Types.ObjectId; date: string; messages: number }[] = [];
   return {

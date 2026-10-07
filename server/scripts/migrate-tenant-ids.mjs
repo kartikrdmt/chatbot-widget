@@ -1,20 +1,10 @@
-// One-off, idempotent migration to tenant-scoped collections (`tenantPlugin`).
-//
-//   before: tenants {name}                      -> tenants {tenantId, name, plan, ...}
-//           sites/visitors/conversations carry an ObjectId `tenantId`
-//           messages carry no tenant at all
-//   after:  every document carries `tenantId` as a string, and messages carry `siteId` too
-//
-// Usage:  node scripts/migrate-tenant-ids.mjs          (reads MONGODB_URI from .env)
-//         node scripts/migrate-tenant-ids.mjs --dry    (prints what it would change)
+// One-off, idempotent: moves an older database to tenant-scoped collections. Run with --dry first.
 import { writeFileSync } from 'node:fs';
 import mongoose from 'mongoose';
 
 try {
   process.loadEnvFile('.env');
-} catch {
-  // rely on the real environment
-}
+} catch {}
 
 const dry = process.argv.includes('--dry');
 const DEMO_TENANT = process.env.DEFAULT_TENANT_ID ?? 'demo-tenant';
@@ -25,14 +15,11 @@ const col = (name) => db.collection(name);
 const report = {};
 const bump = (key, n) => (report[key] = (report[key] ?? 0) + n);
 
-// 1. tenants: give each old tenant a string tenantId (the demo one gets the default id)
-const idMap = new Map(); // old ObjectId string -> new tenantId
+const idMap = new Map();
 for (const tenant of await col('tenants').find({}).toArray()) {
   const tenantId = tenant.tenantId ?? (tenant.name === 'Demo' ? DEMO_TENANT : `t_${tenant._id}`);
   idMap.set(String(tenant._id), tenantId);
   if (tenant.tenantId) continue;
-  // The running server may already have created the new-style record for this tenant: if so, the
-  // legacy one is a duplicate and is dropped instead of renamed.
   if (await col('tenants').findOne({ tenantId, _id: { $ne: tenant._id } })) {
     bump('legacy tenants merged into an existing record', 1);
     if (!dry) await col('tenants').deleteOne({ _id: tenant._id });
@@ -47,7 +34,6 @@ for (const tenant of await col('tenants').find({}).toArray()) {
   }
 }
 
-// 2. sites, visitors, conversations: ObjectId tenantId -> string tenantId
 for (const name of ['sites', 'visitors', 'conversations']) {
   for (const doc of await col(name).find({ tenantId: { $type: 'objectId' } }).toArray()) {
     const tenantId = idMap.get(String(doc.tenantId)) ?? DEMO_TENANT;
@@ -56,7 +42,6 @@ for (const name of ['sites', 'visitors', 'conversations']) {
   }
 }
 
-// 3. messages: take tenantId and siteId from their conversation
 const conversations = new Map(
   (await col('conversations').find({}).toArray()).map((c) => [String(c._id), c]),
 );

@@ -37,7 +37,6 @@ const mockSites = {
   resolveVisitor: vi.fn().mockResolvedValue('v_test'),
 };
 
-/** Records the tenant each callback ran under, like the real context service. */
 const mockTenantContext = {
   seen: [] as string[],
   run: vi.fn(<T>(tenantId: string, callback: () => T): T => {

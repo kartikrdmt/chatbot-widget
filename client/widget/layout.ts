@@ -24,7 +24,6 @@ type Horizontal = 'left' | 'right' | 'center';
 
 const SAFE_SIZE = /^\d*\.?\d+(px|%|vw|vh|dvh|rem|em)$/;
 
-/** A number is pixels; a string must be a plain CSS length. Anything else uses the fallback. */
 export function toCssSize(value: unknown, fallback: string): string {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'number' || /^\d+$/.test(String(value))) return `${value}px`;
@@ -38,7 +37,6 @@ function parsePosition(position: Position): { vertical: Vertical; horizontal: Ho
   return { vertical, horizontal };
 }
 
-/** Pins a fixed box to an edge, or centres it on that axis with auto margins. */
 function axis(
   where: 'left' | 'right' | 'top' | 'bottom' | 'center',
   start: 'left' | 'top',
@@ -53,7 +51,6 @@ function axis(
   return { [where]: distance };
 }
 
-/** The corner or edge the panel grows out of, so it appears to unfold from the launcher. */
 export function panelOrigin(position: Position): string {
   const { vertical, horizontal } = parsePosition(position);
   return `${vertical} ${horizontal}`;
@@ -89,7 +86,6 @@ export function floatingLayout({
   if (expanded) {
     return {
       launcher: { ...launcher, display: 'none' },
-      // Same edges as the compact panel, with the gap closed, so it grows out of its own corner.
       panel: {
         ...axis(horizontal, 'left', 0),
         ...axis(vertical, 'top', 0),
@@ -101,7 +97,6 @@ export function floatingLayout({
     };
   }
 
-  // Beside the launcher when it sits mid-edge, above or below it otherwise.
   const beside = vertical === 'center';
   const step = offset + LAUNCHER_SIZE + GAP;
   const reservedX = beside ? offset + step : offset * 2;

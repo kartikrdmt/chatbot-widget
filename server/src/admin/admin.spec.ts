@@ -109,7 +109,6 @@ describe('mergeSettings (PATCH)', () => {
   });
 });
 
-/** A tiny in-memory stand-in for the Mongoose model: enough for the service's own logic. */
 function fakeModel() {
   const docs: Record<string, unknown>[] = [];
   const make = (data: Record<string, unknown>) => {

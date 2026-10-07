@@ -18,7 +18,6 @@ import { WidgetService } from './widget.service.js';
 import { SiteService } from './site.service.js';
 import { SessionService } from './session.service.js';
 
-/** No tenant header here: the tenant comes from the site token, then every query is scoped to it. */
 @SkipTenant()
 @Controller('widget')
 export class WidgetController {
@@ -29,13 +28,6 @@ export class WidgetController {
     private readonly tenantContext: TenantContextService,
   ) {}
 
-  /**
-   * Returns widget config and a short-lived JWT session token.
-   *
-   * - `token`    — public site token (st_…) from the embed script
-   * - `visitorId` — optional; pass an existing ID to resume a session
-   * - `Origin`   — required; checked against the site's allowed-origins list
-   */
   @Get('config')
   async getConfig(
     @Query('token') token: string | undefined,
@@ -54,8 +46,6 @@ export class WidgetController {
       );
     }
 
-    // Echo the origin before any check, so a rejected website still gets a readable 403/404
-    // (an error message only) and the widget can log why it is not shown.
     response.setHeader('Access-Control-Allow-Origin', origin);
     response.vary('Origin');
 
@@ -71,12 +61,10 @@ export class WidgetController {
     const tenantId = site.tenantId;
     const siteId = site._id.toString();
 
-    // A disabled site gets no session at all, so no chat can start.
     if (site.status === 'disabled') {
       return this.widget.getConfigResponse(site);
     }
 
-    // From here on every query runs for this site's tenant, and only that tenant.
     return this.tenantContext.run(tenantId, async () => {
       const visitorId = await this.sites.resolveVisitor(
         siteId,

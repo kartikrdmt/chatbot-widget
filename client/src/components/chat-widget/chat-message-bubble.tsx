@@ -17,12 +17,10 @@ const safeHref = (href: string | undefined): string | undefined => {
     const url = new URL(href);
     return SAFE_PROTOCOLS.has(url.protocol) ? href : undefined;
   } catch {
-    // Relative URLs have no protocol — allow them as-is
     return href.startsWith('/') || href.startsWith('#') || href.startsWith('.') ? href : undefined;
   }
 };
 
-// react-markdown's own filter would drop tel: links, so apply the same allow-list here instead.
 const urlTransform = (url: string): string => safeHref(url) ?? '';
 
 const MARKDOWN_COMPONENTS: Components = {
@@ -38,7 +36,6 @@ const MARKDOWN_COMPONENTS: Components = {
   },
 };
 
-/** An assistant reply that has started streaming but has no text yet. */
 export const isWaitingForReply = (message: WidgetMessage): boolean =>
   message.sender !== 'visitor' && message.streaming === true && message.text === '';
 
@@ -77,8 +74,6 @@ export function ChatMessageBubble({
     );
   }
 
-  // The server opens a streaming reply with an empty bubble; until the first words arrive,
-  // show the jumping dots in that same spot instead of an empty pill.
   if (isWaitingForReply(message)) {
     return <ChatTypingIndicator showAvatar={showAvatar} avatarText={avatarText} />;
   }

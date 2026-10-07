@@ -4,11 +4,6 @@ const defaults = Object.entries(DEFAULT_VARIABLES)
   .map(([name, value]) => `${name}:${value}`)
   .join(';');
 
-/**
- * Everything the launcher and the panel frame need before any chat code has loaded. Hand-written
- * (the chat's Tailwind stylesheet arrives with the chat), and small on purpose: this is part of the
- * file every visitor downloads.
- */
 export const LOADER_CSS = `
 :host{${defaults}}
 .myra-widget-root{all:initial;display:block;font-family:var(--chat-font-family,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif);font-size:16px;line-height:1.5;color:var(--chat-foreground);-webkit-font-smoothing:antialiased}

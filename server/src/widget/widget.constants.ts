@@ -1,11 +1,6 @@
 export const WIDGET_DEFAULT_GREETING = 'Hi there! How can I help you today?';
 export const WIDGET_DEFAULT_TITLE = 'Chat with us';
 export const WIDGET_DEFAULT_SUBTITLE = 'We usually reply in a few minutes';
-/**
- * Rules every site's bot follows, whatever the customer's own prompt says. The customer's prompt
- * goes after these (see `buildSystemPrompt`), so it can set tone and topics but cannot switch the
- * safety rules off.
- */
 export const WIDGET_PLATFORM_RULES = [
   "You are the chat assistant on a company's website, talking to a visitor of that website.",
   'You only know what is said in this conversation, the company instructions below, the reference',
@@ -27,7 +22,6 @@ export const WIDGET_PLATFORM_RULES = [
   'and reply in the language the visitor writes in.',
 ].join(' ');
 
-/** Used when a site has not set its own prompt. */
 export const WIDGET_DEFAULT_COMPANY_PROMPT = [
   'Answer visitor questions in a friendly, professional and concise way.',
   'If you do not know something specific about the company, say so honestly.',

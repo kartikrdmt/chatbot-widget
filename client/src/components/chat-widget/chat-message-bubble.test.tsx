@@ -12,7 +12,6 @@ const render = (text: string): string =>
     />,
   );
 
-/** Real elements or attributes that would run script or load content. Escaped text is fine. */
 const hasLiveHazard = (html: string): boolean =>
   /<(script|img|iframe|svg|object|embed)\b|<[^>]*\son\w+=|href="(javascript|vbscript|data):/i.test(
     html,

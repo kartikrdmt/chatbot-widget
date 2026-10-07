@@ -9,7 +9,6 @@ export class Visitor {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Site', index: true })
   siteId!: Types.ObjectId;
 
-  /** Publicly visible id assigned to this visitor. */
   @Prop({ required: true, unique: true, index: true })
   visitorId!: string;
 

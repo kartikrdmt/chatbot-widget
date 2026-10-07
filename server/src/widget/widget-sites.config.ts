@@ -7,13 +7,6 @@ const DEVELOPMENT_SITES: WidgetSite[] = [
   },
 ];
 
-/**
- * Reads `WIDGET_SITES`, a JSON array of `{ key, allowedOrigins, position? }`.
- *
- * Unset means the demo site in development and test, and no sites at all
- * elsewhere, so a deployment that forgets to configure this rejects every key
- * instead of accepting any.
- */
 export function parseWidgetSites(
   raw: string | undefined,
   nodeEnv: string,

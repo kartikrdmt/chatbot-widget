@@ -1,11 +1,3 @@
-/**
- * Typed configuration. Same shape and env var names as the myra-ai API (`apps/api`), so the
- * widget module reads the same settings after it is merged.
- *
- * Differences, on purpose: `port` falls back to `PORT` and then 4000 (the demo's port), and
- * `mongodb.dbName` is only set when `MONGODB_DB` is, so a database named in the connection string
- * is respected.
- */
 const toInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value ?? '', 10);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -28,7 +20,6 @@ export interface AppConfig {
   nodeEnv: string;
   port: number;
   corsOrigins: string[];
-  /** Behind a reverse proxy, read the visitor's IP from X-Forwarded-For. */
   trustProxy: boolean;
   mongodb: {
     uri: string;
@@ -40,24 +31,17 @@ export interface AppConfig {
     timeoutMs: number;
   };
   widget: {
-    /** Signs the 15-minute chat session tokens. */
     jwtSecret: string;
-    /** `gemini` answers directly; `engine` asks the Python engine (retrieval + citations). */
     answerProvider: 'gemini' | 'engine';
-    /** Public address of the widget bundle, used in the generated embed snippet. */
     publicUrl: string;
-    /** Public address of this API, used in the generated embed snippet. */
     apiPublicUrl: string;
   };
   admin: {
-    /** Placeholder auth for /admin/*. The real project replaces this with its login. */
     apiKey: string;
   };
   tenancy: {
-    /** Request header the TenantGuard reads. */
     header: string;
     defaultTenantId: string;
-    /** When true, a request with no tenant header is served as the default tenant. */
     allowDefaultTenant: boolean;
   };
 }
@@ -102,7 +86,7 @@ export const configuration = (): AppConfig => {
     tenancy: {
       header: (process.env.TENANT_HEADER ?? 'x-tenant-id').toLowerCase(),
       defaultTenantId: process.env.DEFAULT_TENANT_ID ?? 'demo-tenant',
-      // Fails CLOSED: an unset NODE_ENV in production must not make the header optional.
+      // Fails closed: an unset NODE_ENV in production must not make the tenant header optional.
       allowDefaultTenant: toBool(
         process.env.ALLOW_DEFAULT_TENANT,
         nodeEnv === 'development' || nodeEnv === 'test',

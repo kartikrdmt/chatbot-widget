@@ -3,7 +3,6 @@ import type { CSSProperties } from 'react';
 import { mergeTheme, sanitizeTheme, themeToCssVariables } from './theme-vars';
 import { type WidgetAppearance, WidgetAppearanceSchema, type WidgetTheme } from '@myra/contracts';
 
-/** The options a site passes to `MyraWidget.init` (or as `data-*` attributes) for how the chat looks. */
 export interface WidgetAppearanceOptions {
   title?: string;
   subtitle?: string;
@@ -17,13 +16,10 @@ export interface WidgetAppearanceOptions {
   textColor?: string;
   mutedColor?: string;
   borderColor?: string;
-  /** `square`, `rounded` or `pill`. */
   radius?: string;
-  /** A Google Font family name, such as `Inter`. */
   font?: string;
 }
 
-/** Anything invalid (a bad colour, an over-long text) is dropped rather than rejected. */
 export function parseWidgetAppearance(options: WidgetAppearanceOptions): WidgetAppearance {
   return WidgetAppearanceSchema.parse({
     title: options.title,
@@ -45,11 +41,6 @@ export function parseWidgetAppearance(options: WidgetAppearanceOptions): WidgetA
   });
 }
 
-/**
- * Merges the server's theme with the overrides from `data-*` attributes or React props, and turns
- * the result into CSS custom properties for the shadow root. Overrides win; a missing override
- * never clobbers a server value.
- */
 export function themeToStyle(
   serverTheme: WidgetTheme | undefined,
   appearanceTheme?: WidgetTheme | undefined,

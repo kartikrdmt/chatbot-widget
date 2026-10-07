@@ -40,7 +40,6 @@ describe('floating layout', () => {
   });
 
   it('puts the panel above or below the launcher, or beside it when it sits mid-edge', () => {
-    // 24 offset + 56 launcher + 16 gap = 96
     expect(layout('bottom-right').panel).toMatchObject({ bottom: 96, right: 24 });
     expect(layout('top-left').panel).toMatchObject({ top: 96, left: 24 });
     expect(layout('left-center').panel).toMatchObject({ left: 96, top: 0, bottom: 0 });

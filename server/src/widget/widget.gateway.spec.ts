@@ -25,7 +25,6 @@ const SESSION = {
 
 const CONVERSATION = { _id: { toString: () => 'conv-1' }, siteId: 'site-1' };
 
-/** Everything the gateway depends on, as controllable fakes. */
 function setup(
   overrides: {
     site?: Record<string, unknown> | null;
@@ -37,18 +36,16 @@ function setup(
   const saved: { sender: string; text: string; sources?: unknown }[] = [];
 
   const sites = {
-    findById: vi
-      .fn()
-      .mockResolvedValue(
-        overrides.site === null
-          ? null
-          : {
-              _id: { toString: () => 'site-1' },
-              status: 'active',
-              settings: {},
-              ...overrides.site,
-            },
-      ),
+    findById: vi.fn().mockResolvedValue(
+      overrides.site === null
+        ? null
+        : {
+            _id: { toString: () => 'site-1' },
+            status: 'active',
+            settings: {},
+            ...overrides.site,
+          },
+    ),
     findTenant: vi
       .fn()
       .mockResolvedValue(
@@ -246,11 +243,11 @@ describe('a visitor message', () => {
     expect(t.tenantsSeen).toContain('tenant-1');
     expect(t.events(c)).toEqual([
       'chat:typing',
-      'chat:message', // empty placeholder
+      'chat:message',
       'chat:message:delta',
       'chat:message:delta',
-      'chat:message:delta', // done
-      'chat:message', // final
+      'chat:message:delta',
+      'chat:message',
       'chat:typing',
     ]);
 

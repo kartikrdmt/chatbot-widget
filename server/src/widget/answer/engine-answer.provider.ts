@@ -15,14 +15,6 @@ import {
 
 const CHUNK_SIZE = 48;
 
-/**
- * Asks the Python engine, which owns retrieval over the scraped site, using the engine's own
- * `ChatRequest` / `ChatResponse` contract (`POST {ENGINE_URL}/chat`). The citations it returns
- * become the source links under the answer.
- *
- * The engine answers in one piece, so the text is handed on in small chunks to keep the widget's
- * streaming behaviour the same for every provider.
- */
 @Injectable()
 export class EngineAnswerProvider implements AnswerProvider {
   private readonly logger = new Logger(EngineAnswerProvider.name);
@@ -57,7 +49,6 @@ export class EngineAnswerProvider implements AnswerProvider {
       throw new Error(`Engine /chat failed with ${response.status}.`);
     }
 
-    // Parsed through the shared schema, so a drift between the services fails here, loudly.
     const parsed = ChatResponseSchema.parse(await response.json());
 
     for (let i = 0; i < parsed.answer.length; i += CHUNK_SIZE) {

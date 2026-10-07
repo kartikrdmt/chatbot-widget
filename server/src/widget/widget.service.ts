@@ -22,15 +22,10 @@ import {
   WIDGET_DEFAULT_TITLE,
 } from './widget.constants.js';
 
-/** What `GET /widget/config` sends: exactly the contract the widget reads. */
 export type ServerConfigResponse = WidgetConfig;
 
 @Injectable()
 export class WidgetService {
-  /**
-   * Builds the config response from a site's saved settings. Server-only settings (the prompt, the
-   * model, the limits) are never copied in: only theme, copy, launcher and features go out.
-   */
   getConfigResponse(
     site: SiteDocument,
     session?: SessionResult,
@@ -68,11 +63,6 @@ export class WidgetService {
     };
   }
 
-  /**
-   * Stored messages as provider-neutral turns. Neighbouring turns from the same side are merged
-   * (models want alternating turns), and the opening assistant greeting is dropped so a
-   * conversation always starts with the visitor.
-   */
   historyToTurns(
     messages: Pick<MessageDocument, 'sender' | 'text'>[],
   ): ChatTurn[] {

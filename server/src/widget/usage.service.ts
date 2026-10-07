@@ -8,7 +8,6 @@ import {
 } from './schemas/usage-daily.schema.js';
 
 export interface QuotaStatus {
-  /** False once the tenant has used its whole monthly allowance. */
   allowed: boolean;
   used: number;
   limit: number;
@@ -21,14 +20,9 @@ export interface SiteUsage {
 
 const ALERT_AT = 0.8;
 
-/**
- * Counts messages per site per day and enforces the tenant's monthly allowance. Every query is
- * scoped to the tenant in context by `tenantPlugin`.
- */
 @Injectable()
 export class UsageService {
   private readonly logger = new Logger(UsageService.name);
-  /** `tenant|month`, so the 80% warning is logged once, not on every message. */
   private readonly alerted = new Set<string>();
 
   constructor(
@@ -36,7 +30,6 @@ export class UsageService {
     private readonly usageModel: Model<UsageDailyDocument>,
   ) {}
 
-  /** Adds one message to today's count for the site. An atomic `$inc`, safe under concurrency. */
   async recordMessage(siteId: string, now = new Date()): Promise<void> {
     await this.usageModel
       .updateOne(
@@ -47,7 +40,6 @@ export class UsageService {
       .exec();
   }
 
-  /** Where the tenant stands this month, against its allowance. */
   async monthlyStatus(
     tenantId: string,
     limit: number,
@@ -72,7 +64,6 @@ export class UsageService {
     return { allowed: used < limit, used, limit };
   }
 
-  /** This month's messages for each site of the tenant in context. */
   async bySite(now = new Date()): Promise<SiteUsage[]> {
     const monthStart = `${dayOf(now).slice(0, 7)}-01`;
     const days = await this.usageModel
@@ -89,5 +80,4 @@ export class UsageService {
   }
 }
 
-/** The UTC calendar day, `YYYY-MM-DD`. */
 export const dayOf = (date: Date): string => date.toISOString().slice(0, 10);

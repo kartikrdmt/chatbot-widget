@@ -17,17 +17,6 @@ const normalizeOrigin = (origin: string): string => origin.trim().toLowerCase();
 
 const ORIGIN_CACHE_MS = 30_000;
 
-/**
- * Sites, tenants and visitors, backed by MongoDB.
- *
- * Two kinds of query live here, and the difference matters:
- *
- * - Anything that runs for a known tenant (a visitor, a site by id) relies on `tenantPlugin` to
- *   scope it. Callers run inside `TenantContextService.run(tenantId, …)`.
- * - Looking a site up BY ITS PUBLIC TOKEN, and listing every site's origins for CORS, cannot know
- *   the tenant yet: the token is how we find out. Those are the only deliberate
- *   `skipTenant: true` queries, so they are easy to find and review.
- */
 @Injectable()
 export class SiteService implements OnModuleInit {
   private originCache: { at: number; origins: Set<string> } | null = null;
@@ -48,7 +37,7 @@ export class SiteService implements OnModuleInit {
       await this.seedDemoSite();
   }
 
-  /** The one lookup that cannot be tenant-scoped: the public token is how the tenant is found. */
+  /** Unscoped on purpose: the token is how the tenant is found. */
   async findByToken(token: string): Promise<SiteDocument | null> {
     return this.siteModel
       .findOne({ publicToken: token })
@@ -56,7 +45,6 @@ export class SiteService implements OnModuleInit {
       .exec();
   }
 
-  /** Scoped to the tenant in context. */
   async findById(id: string): Promise<SiteDocument | null> {
     return this.siteModel.findById(id).exec();
   }
@@ -66,7 +54,7 @@ export class SiteService implements OnModuleInit {
     return site.allowedOrigins.some((o) => normalizeOrigin(o) === candidate);
   }
 
-  /** Every origin across every site, for the server-wide CORS check. */
+  /** Unscoped on purpose: CORS needs every site's origins. */
   async allOrigins(): Promise<string[]> {
     const sites = await this.siteModel
       .find({}, { allowedOrigins: 1 })
@@ -76,10 +64,6 @@ export class SiteService implements OnModuleInit {
     return sites.flatMap((s) => s.allowedOrigins);
   }
 
-  /**
-   * True when any site lists this origin. Backed by a short-lived cache, so a site added to the
-   * database starts working within ORIGIN_CACHE_MS without restarting the server.
-   */
   async isKnownOrigin(origin: string): Promise<boolean> {
     const now = Date.now();
     if (!this.originCache || now - this.originCache.at > ORIGIN_CACHE_MS) {
@@ -92,15 +76,10 @@ export class SiteService implements OnModuleInit {
     return this.originCache.origins.has(normalizeOrigin(origin));
   }
 
-  /** Forget the cached origins, so a just-changed site list applies immediately. */
   invalidateOriginCache(): void {
     this.originCache = null;
   }
 
-  /**
-   * The visitor for this request: the one the widget remembered if it really belongs to this site,
-   * otherwise a fresh one. Runs in the tenant's context.
-   */
   async resolveVisitor(
     siteId: string,
     requestedVisitorId?: string,
@@ -126,12 +105,10 @@ export class SiteService implements OnModuleInit {
     return visitorId;
   }
 
-  /** Platform-level lookup of a tenant's plan; tenants are not tenant-scoped. */
   async findTenant(tenantId: string): Promise<TenantDocument | null> {
     return this.tenantModel.findOne({ tenantId }).exec();
   }
 
-  /** Creates a tenant record if it does not exist yet. */
   async ensureTenant(
     tenantId: string,
     name = tenantId,
@@ -141,19 +118,16 @@ export class SiteService implements OnModuleInit {
     return this.tenantModel.create({ tenantId, name });
   }
 
-  /** A new public token: `st_` plus 16 random characters. */
   newPublicToken(): string {
     return `st_${randomBytes(12).toString('base64url').slice(0, 16)}`;
   }
 
-  /** Development only: one demo site, so the widget works with no manual database setup. */
   private async seedDemoSite(): Promise<void> {
     const { defaultTenantId } = this.config.get('tenancy', { infer: true });
     await this.tenantContext.run(defaultTenantId, async () => {
       await this.ensureTenant(defaultTenantId, 'Demo');
       const existing = await this.findByToken('st_demo');
       if (existing) {
-        // A demo site created before it had settings gets them once; later edits are never touched.
         if (Object.keys(existing.settings ?? {}).length === 0) {
           existing.settings = DEMO_SITE_SETTINGS;
           existing.markModified('settings');

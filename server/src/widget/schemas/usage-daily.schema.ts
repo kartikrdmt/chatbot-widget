@@ -4,13 +4,11 @@ import { Types } from 'mongoose';
 
 import { tenantPlugin } from '../../common/plugins/tenant.plugin.js';
 
-/** How many visitor messages a site received on one UTC day. One document per site per day. */
 @Schema({ timestamps: true, collection: 'usage_daily' })
 export class UsageDaily {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Site' })
   siteId!: Types.ObjectId;
 
-  /** UTC day, `YYYY-MM-DD`. */
   @Prop({ required: true })
   date!: string;
 

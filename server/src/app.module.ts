@@ -56,16 +56,11 @@ import { WidgetModule } from './widget/widget.module.js';
     AdminModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    // Tenancy is opt-out, not opt-in: a new controller is scoped by default and has to say
-    // `@SkipTenant()` to escape.
-    { provide: APP_GUARD, useClass: TenantGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: TenantGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    // Must cover every route so the async context exists before anything touches the database.
+    // Must cover every route: the async context has to exist before any database call.
     consumer.apply(TenantContextMiddleware).forRoutes('*');
   }
 }

@@ -1,19 +1,10 @@
-/**
- * Theme values -> CSS custom properties, with no dependencies at all.
- *
- * This is shared by the small loader (which paints the launcher before any chat code has loaded,
- * and so cannot afford zod or React) and by the chat. The validators below repeat the rules in
- * `@myra/contracts`; `theme-vars.test.ts` checks that the two never disagree.
- */
+// No dependencies on purpose: the loader can't afford zod. These rules repeat @myra/contracts; theme-vars.test.ts keeps them equal.
 
-/** Plain CSS colours only, because these values end up inside a style attribute. */
 export const COLOR_PATTERN =
   /^(#[0-9a-f]{3,8}|[a-z]+|(rgb|hsl|oklch|oklab|lab|lch|hwb)a?\([0-9a-z\s.,%/+-]+\))$/i;
 
-/** Letters, digits and spaces only: a font name goes into a URL and a CSS value. */
 export const FONT_PATTERN = /^[A-Za-z0-9 ]{1,80}$/;
 
-/** A CSS length such as `380px`, `90vw` or `100%`. Nothing that could carry other CSS. */
 export const SIZE_PATTERN = /^\d*\.?\d+(px|%|vw|vh|dvh|rem|em)$/;
 
 export type RadiusStyle = 'square' | 'rounded' | 'pill';
@@ -40,7 +31,6 @@ const COLOR_VARIABLES = {
   border: '--chat-border',
 } as const;
 
-/** One style drives the window, the message bubbles, the buttons/input and the launcher. */
 export const RADIUS_VARIABLES: Record<RadiusStyle, Record<string, string>> = {
   square: {
     '--chat-radius-window': '0px',
@@ -62,7 +52,6 @@ export const RADIUS_VARIABLES: Record<RadiusStyle, Record<string, string>> = {
   },
 };
 
-/** The look when a site sets nothing. Also written into `widget.css`; a test keeps them equal. */
 export const DEFAULT_VARIABLES: Record<string, string> = {
   '--chat-surface': 'oklch(1 0 0)',
   '--chat-raised': 'oklch(0.97 0.006 265)',
@@ -78,7 +67,6 @@ export const DEFAULT_VARIABLES: Record<string, string> = {
 const isRadius = (value: unknown): value is RadiusStyle =>
   value === 'square' || value === 'rounded' || value === 'pill';
 
-/** Keeps only the values that pass the rules; anything else is dropped, never trusted. */
 export function sanitizeTheme(raw: unknown): ThemeValues {
   if (!raw || typeof raw !== 'object') return {};
   const input = raw as Record<string, unknown>;
@@ -95,7 +83,6 @@ export function sanitizeTheme(raw: unknown): ThemeValues {
   return clean;
 }
 
-/** `later` wins, but a value that is missing in `later` never wipes out one in `base`. */
 export function mergeTheme(base: ThemeValues, later: ThemeValues): ThemeValues {
   const merged: Record<string, string | undefined> = { ...base };
   for (const [key, value] of Object.entries(later)) {
@@ -104,10 +91,6 @@ export function mergeTheme(base: ThemeValues, later: ThemeValues): ThemeValues {
   return merged as ThemeValues;
 }
 
-/**
- * The CSS custom properties for a (sanitised) theme. `muted` also drives the dimmer text colour
- * used for timestamps; `font` sets the font stack.
- */
 export function themeToCssVariables(theme: ThemeValues): Record<string, string> {
   const variables: Record<string, string> = {};
   for (const [key, variable] of Object.entries(COLOR_VARIABLES)) {

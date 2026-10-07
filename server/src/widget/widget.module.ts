@@ -52,7 +52,6 @@ import { WidgetService } from './widget.service.js';
     GeminiAnswerProvider,
     EngineAnswerProvider,
     {
-      // Which provider answers: Gemini directly, or the Python engine (ANSWER_PROVIDER=engine).
       provide: ANSWER_PROVIDER,
       inject: [ConfigService, GeminiAnswerProvider, EngineAnswerProvider],
       useFactory: (

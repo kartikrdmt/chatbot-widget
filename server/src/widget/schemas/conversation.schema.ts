@@ -16,7 +16,6 @@ export class Conversation {
 export type ConversationDocument = HydratedDocument<Conversation>;
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 ConversationSchema.plugin(tenantPlugin);
-// One conversation per visitor per site.
 ConversationSchema.index(
   { tenantId: 1, siteId: 1, visitorId: 1 },
   { unique: true },

@@ -1,7 +1,3 @@
-/**
- * The chat: React, Markdown, the socket, and the chat's own stylesheet. Loaded by the loader the
- * first time the chat opens (or at once when it was left open, or is inline), never on page load.
- */
 import { WidgetConfigSchema } from '@myra/contracts';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -13,11 +9,9 @@ import chatCss from './chat.generated.txt';
 export interface MountChatOptions {
   shadow: ShadowRoot;
   target: HTMLElement;
-  /** The config response, exactly as the server sent it. */
   rawConfig: unknown;
   sessionToken: string;
   apiUrl: string;
-  /** The `data-*` / prop overrides for texts (title, greeting...). */
   options: WidgetAppearanceOptions;
   expanded: boolean;
   inline: boolean;
@@ -42,7 +36,7 @@ export interface ChatModule {
   mountChat: (options: MountChatOptions) => ChatHandle;
 }
 
-/** Tailwind's `@property` rules only work in the main document, never inside a shadow root. */
+// Tailwind's @property rules are ignored inside a shadow root, so they are added to the page.
 function installDocumentProperties(): void {
   if (document.getElementById('myra-widget-properties')) return;
   const rules = chatCss.match(/@property[^{]+\{[^}]*\}/g);
@@ -56,8 +50,7 @@ function installDocumentProperties(): void {
 export function mountChat(options: MountChatOptions): ChatHandle {
   installDocumentProperties();
 
-  // The chat's stylesheet goes in the shadow root, in front of the loader's, so the loader's
-  // hand-written rules (launcher, frame) keep winning over the chat's resets.
+  // Prepended, so the loader's own rules (launcher, frame) still win over the chat's resets.
   const style = document.createElement('style');
   style.textContent = chatCss;
   options.shadow.prepend(style);

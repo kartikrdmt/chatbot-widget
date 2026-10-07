@@ -1,9 +1,5 @@
 import type { SiteSettings } from './schemas/site.schema.js';
 
-/**
- * The look and prompt of the development demo site (`st_demo`). This is the same kind of record an
- * admin saves for a real customer: nothing about Myra Technolabs is hard-coded anywhere else.
- */
 export const DEMO_SITE_SETTINGS: SiteSettings = {
   copy: {
     title: 'Myra Technolabs',

@@ -8,7 +8,6 @@ import { AdminUsageController } from './admin-usage.controller.js';
 import { AdminSitesController } from './admin-sites.controller.js';
 import { AdminSitesService } from './admin-sites.service.js';
 
-/** The API the admin panel (dashboard) calls to manage sites. */
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Site.name, schema: SiteSchema }]),

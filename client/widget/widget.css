@@ -1,11 +1,6 @@
-/*
- * Styles for the embeddable widget. Built by scripts/build-widget.mjs and injected into the
- * widget's shadow root, so nothing here can reach the host page and the page can't restyle it.
- */
 @import 'tailwindcss' source(none);
 @source '../src/components/chat-widget';
 
-/* Defaults for the theme, overridden by the data-* colour options or server config. */
 :host {
   --chat-surface: oklch(1 0 0);
   --chat-raised: oklch(0.97 0.006 265);
@@ -35,8 +30,7 @@
 }
 
 .myra-widget-root {
-  /* Inherited properties (font, colour, letter-spacing...) cross the shadow boundary from
-     the host page, so reset them all here and set only what the widget wants. */
+  /* Inherited properties (font, colour, letter-spacing...) cross the shadow boundary, so reset them all here. */
   all: initial;
   display: block;
   font-family: var(--chat-font-family, var(--font-sans));

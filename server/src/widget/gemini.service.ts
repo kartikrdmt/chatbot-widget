@@ -19,7 +19,6 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const RETRY_STATUSES = new Set([429, 500, 503]);
 const RETRY_DELAYS_MS = [800, 2_000];
 
-/** Gemini answers 503 when it is briefly overloaded, so retry a couple of times before giving up. */
 async function fetchWithRetry(
   url: string,
   init: () => RequestInit,
@@ -33,7 +32,6 @@ async function fetchWithRetry(
   return fetch(url, init());
 }
 
-/** Thin client for Gemini's generateContent and streamGenerateContent endpoints. */
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
@@ -144,9 +142,7 @@ export class GeminiService {
             .map((p) => p.text ?? '')
             .join('');
           if (text) yield text;
-        } catch {
-          // Skip malformed SSE chunks.
-        }
+        } catch {}
       }
     }
   }

@@ -1,4 +1,3 @@
-/** The letters come from the site's settings (default: the first letter of its title). */
 export function ChatBrandMark({ text }: { text?: string }): React.ReactElement {
   return (
     <span

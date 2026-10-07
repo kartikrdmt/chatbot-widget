@@ -6,15 +6,12 @@ import { UsageService } from '../widget/usage.service.js';
 import { AdminGuard } from './admin.guard.js';
 
 export interface UsageReport {
-  /** `YYYY-MM`, UTC. */
   month: string;
   used: number;
-  /** The tenant's monthly allowance. */
   limit: number;
   sites: { siteId: string; messages: number }[];
 }
 
-/** This month's message usage for the tenant in context, for the dashboard. */
 @UseGuards(AdminGuard)
 @Controller('admin/usage')
 export class AdminUsageController {

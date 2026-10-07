@@ -5,13 +5,6 @@ import { parseWidgetSites } from './widget-sites.config.js';
 
 const normalizeOrigin = (origin: string): string => origin.trim().toLowerCase();
 
-/**
- * The sites allowed to use the widget, keyed by their public widget key.
- *
- * Backed by the `WIDGET_SITES` environment variable today. Callers only use
- * `find`, `require` and `isOriginAllowed`, so moving the list into a database
- * changes this file and nothing else.
- */
 @Injectable()
 export class WidgetSitesService {
   private readonly sites: Map<string, WidgetSite>;
@@ -34,7 +27,6 @@ export class WidgetSitesService {
     return site;
   }
 
-  /** Every origin that any site is allowed to embed the widget from. */
   allOrigins(): string[] {
     return [...this.sites.values()].flatMap((site) => site.allowedOrigins);
   }

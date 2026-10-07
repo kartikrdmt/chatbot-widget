@@ -4,10 +4,6 @@ import { Types } from 'mongoose';
 
 import { tenantPlugin } from '../../common/plugins/tenant.plugin.js';
 
-/**
- * Messages live in their own collection, not inside `conversations`: a conversation can grow
- * without limit, and a MongoDB document is capped at 16 MB.
- */
 @Schema({ timestamps: true, collection: 'messages' })
 export class Message {
   @Prop({
@@ -27,7 +23,6 @@ export class Message {
   @Prop({ required: true })
   text!: string;
 
-  /** Echoed from the client to allow idempotent message delivery. */
   @Prop({ index: true, sparse: true })
   clientMessageId?: string;
 
