@@ -1,7 +1,7 @@
 'use client';
 
 import type { WidgetMessage } from '@myra/contracts';
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -23,9 +23,16 @@ export function ChatMessageList({
   showSources = true,
 }: ChatMessageListProps): React.ReactElement {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const previousCount = useRef(0);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useLayoutEffect(() => {
+    const added = messages.length - previousCount.current;
+    // Only one new message animates. The first appearance, a loaded history, or an update while the
+    // tab is in the background jumps straight to the bottom (a background tab would otherwise
+    // postpone the animation and play it all at once when the visitor comes back).
+    const jump = previousCount.current === 0 || added > 1 || document.hidden;
+    previousCount.current = messages.length;
+    bottomRef.current?.scrollIntoView({ behavior: jump ? 'auto' : 'smooth' });
   }, [messages, typing]);
 
   const firstMessage = messages[0];
