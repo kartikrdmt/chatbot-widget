@@ -19,11 +19,14 @@ export interface ChatbotWidgetProps {
   /** The site's public token (st_…). Required. */
   siteToken: string;
   /**
-   * Where the widget app bundle is hosted, for example `https://chat.example.com`.
-   * Defaults to the production CDN URL baked into the bundle.
+   * Where `widget.js` is hosted, for example `https://chat.example.com`. Needed unless
+   * `widget.js` is already loaded on the page.
    */
   widgetUrl?: string;
-  /** The chatbot API, for example `https://api.example.com`. Defaults to the production API. */
+  /**
+   * The chatbot API, for example `https://api.example.com`. Optional: it defaults to the API
+   * address built into `widget.js`.
+   */
   apiUrl?: string;
 
   /**
@@ -72,6 +75,10 @@ export interface ChatbotWidgetProps {
   mutedColor?: string;
   /** Borders and divider lines. */
   borderColor?: string;
+  /** Corner style of the window, bubbles, buttons and launcher. */
+  radius?: 'square' | 'rounded' | 'pill';
+  /** A Google Font family name, such as `Inter`. Loaded into the page and used by the chat. */
+  font?: string;
 }
 
 interface MyraWidgetInstance {

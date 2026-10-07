@@ -1,12 +1,12 @@
 'use client';
 
-import type { WidgetMessage } from '@/lib/contracts/widget';
+import type { WidgetMessage } from '@myra/contracts';
 import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
 
 import { ChatDayDivider } from './chat-day-divider';
-import { ChatMessageBubble } from './chat-message-bubble';
+import { ChatMessageBubble, isWaitingForReply } from './chat-message-bubble';
 import { ChatTypingIndicator } from './chat-typing-indicator';
 
 interface ChatMessageListProps {
@@ -52,7 +52,7 @@ export function ChatMessageList({
           </div>
         );
       })}
-      {typing ? (
+      {typing && !(lastMessage && isWaitingForReply(lastMessage)) ? (
         <div className={cn(lastMessage && lastMessage.sender !== 'visitor' ? '' : 'mt-3')}>
           <ChatTypingIndicator
             showAvatar={lastMessage?.sender === 'visitor' || !lastMessage}

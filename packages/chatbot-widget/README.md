@@ -14,11 +14,11 @@ import { ChatbotWidget } from '@myra-technolabs/chatbot-widget';
 export function Chat() {
   return (
     <ChatbotWidget
-      widgetKey="your-site-key"
+      siteToken="st_your_site_token"
       widgetUrl="https://chat.example.com"
       apiUrl="https://api.example.com"
       position="bottom-left"
-      accentColor="#16a34a"
+      accentColor="#162E56"
       title="Myra Technolabs"
       subtitle="AI assistant"
     />
@@ -40,7 +40,7 @@ a server component such as `app/layout.tsx`.
 
 ```tsx
 <div style={{ maxWidth: 480, margin: '0 auto' }}>
-  <ChatbotWidget inline widgetKey="..." widgetUrl="..." apiUrl="..." height={520} />
+  <ChatbotWidget inline siteToken="st_..." widgetUrl="..." apiUrl="..." height={520} />
 </div>
 ```
 
@@ -48,7 +48,7 @@ a server component such as `app/layout.tsx`.
 
 | Prop | What it controls |
 | --- | --- |
-| `widgetKey`, `widgetUrl`, `apiUrl` | Required. Site key, where `widget.js` is hosted, API host |
+| `siteToken`, `widgetUrl`, `apiUrl` | Required. Site token (`st_...`), where `widget.js` is hosted, API host |
 | `position`, `offset`, `width`, `height`, `inline` | Placement and size (above) |
 | `title`, `subtitle`, `greeting`, `placeholder`, `avatarText` | Texts |
 | `accentColor` | Header, launcher, send button, your bubbles, bot avatar |
@@ -58,12 +58,14 @@ a server component such as `app/layout.tsx`.
 | `textColor` | Main text |
 | `mutedColor` | Timestamps and placeholder |
 | `borderColor` | Borders and dividers |
+| `radius` | Corner style: `square`, `rounded` or `pill` |
+| `font` | A Google Font name, such as `Inter` |
 
 These are the same options as the `data-*` attributes on the script tag
 (`data-accent-color`, `data-position`, `data-container`, ...).
 
-The site's domain must be allowed for the widget key on the server (`WIDGET_SITES`), otherwise the
-chat shows "This chat widget is not available."
+The site's domain must be in the allowed addresses of the site token's record in MongoDB, otherwise
+the widget doesn't appear (the browser console says why).
 
 ## Publishing
 

@@ -1,116 +1,109 @@
 import type { SiteDocument } from './schemas/site.schema.js';
-import { GeminiService } from './gemini.service.js';
 import { WidgetService } from './widget.service.js';
-import {
-  WIDGET_DEFAULT_SYSTEM_PROMPT,
-  WIDGET_ERROR_REPLY,
-} from './widget.constants.js';
 
-const DEMO_SITE = { settings: {} } as unknown as SiteDocument;
+const site = (overrides: Record<string, unknown> = {}) =>
+  ({
+    _id: { toString: () => 'site-1' },
+    status: 'active',
+    settings: {},
+    ...overrides,
+  }) as unknown as SiteDocument;
 
-describe('WidgetService.reply', () => {
-  it('uses the default system prompt and passes turns to Gemini', async () => {
-    const generate = vi.fn().mockResolvedValue('Hello!');
-    const service = new WidgetService({
-      generate,
-    } as unknown as GeminiService);
+describe('WidgetService.getConfigResponse', () => {
+  const service = new WidgetService();
 
-    const reply = await service.reply(
-      'and pricing?',
-      [
-        { role: 'user', text: 'What do you do?' },
-        { role: 'model', text: 'We build software.' },
-      ],
-      DEMO_SITE,
+  it('sends what an admin saved, under the names the widget reads', () => {
+    const config = service.getConfigResponse(
+      site({
+        settings: {
+          theme: { accent: '#162E56', radius: 'pill' },
+          copy: { title: 'Acme Support', avatarText: 'A' },
+          launcher: { position: 'left-center', offset: 12 },
+          features: { streaming: false },
+        },
+      }),
     );
+    expect(config.theme).toMatchObject({ accent: '#162E56', radius: 'pill' });
+    expect(config.copy).toMatchObject({
+      title: 'Acme Support',
+      avatarText: 'A',
+    });
+    expect(config.launcher).toMatchObject({
+      position: 'left-center',
+      offset: 12,
+    });
+    expect(config.features.streaming).toBe(false);
+  });
 
-    expect(reply.text).toBe('Hello!');
-    expect(generate).toHaveBeenCalledWith(
-      WIDGET_DEFAULT_SYSTEM_PROMPT,
-      [
-        { role: 'user', text: 'What do you do?' },
-        { role: 'model', text: 'We build software.' },
-        { role: 'user', text: 'and pricing?' },
-      ],
-      undefined,
+  it('never sends server-only settings', () => {
+    const config = service.getConfigResponse(
+      site({
+        settings: {
+          systemPrompt: 'SECRET PROMPT',
+          llmModel: 'secret-model',
+          messagesPerMinute: 3,
+          siteMessagesPerMinute: 9,
+        },
+      }),
+    );
+    const sent = JSON.stringify(config);
+    expect(sent).not.toMatch(
+      /SECRET PROMPT|secret-model|messagesPerMinute|siteMessagesPerMinute/,
     );
   });
 
-  it('uses a per-site systemPrompt when configured', async () => {
-    const generate = vi.fn().mockResolvedValue('Hi!');
-    const service = new WidgetService({
-      generate,
-    } as unknown as GeminiService);
-    const site = {
-      settings: { systemPrompt: 'You are Acme bot.' },
-    } as unknown as SiteDocument;
-
-    await service.reply('hi', [], site);
-
-    expect(generate).toHaveBeenCalledWith(
-      'You are Acme bot.',
-      [{ role: 'user', text: 'hi' }],
-      undefined,
-    );
+  it('falls back to defaults for a site with no settings', () => {
+    const config = service.getConfigResponse(site());
+    expect(config.copy.title).toBe('Chat with us');
+    expect(config.launcher.position).toBe('bottom-right');
+    expect(config.features).toEqual({ streaming: true, showSources: true });
   });
 
-  it('uses a per-site llmModel when configured', async () => {
-    const generate = vi.fn().mockResolvedValue('Hi!');
-    const service = new WidgetService({
-      generate,
-    } as unknown as GeminiService);
-    const site = {
-      settings: { llmModel: 'gemini-2.0-pro' },
-    } as unknown as SiteDocument;
-
-    await service.reply('hi', [], site);
-
-    expect(generate).toHaveBeenCalledWith(
-      WIDGET_DEFAULT_SYSTEM_PROMPT,
-      [{ role: 'user', text: 'hi' }],
-      'gemini-2.0-pro',
+  it('drops one bad stored value without breaking the rest', () => {
+    const config = service.getConfigResponse(
+      site({ settings: { theme: { accent: 'red; evil', radius: 'pill' } } }),
     );
+    expect(config.theme.accent).toBeUndefined();
+    expect(config.theme.radius).toBe('pill');
   });
 
-  it('falls back to an apology when Gemini fails', async () => {
-    const generate = vi.fn().mockRejectedValue(new Error('boom'));
-    const service = new WidgetService({
-      generate,
-    } as unknown as GeminiService);
-
-    expect((await service.reply('hi', [], DEMO_SITE)).text).toBe(
-      WIDGET_ERROR_REPLY,
-    );
+  it('includes the session and visitor only when given', () => {
+    const session = { token: 't', expiresAt: '2099-01-01T00:00:00.000Z' };
+    expect(service.getConfigResponse(site(), session, 'v_1')).toMatchObject({
+      session,
+      visitorId: 'v_1',
+    });
+    expect(service.getConfigResponse(site())).not.toHaveProperty('session');
   });
 });
 
 describe('WidgetService.historyToTurns', () => {
-  const service = new WidgetService({} as GeminiService);
+  const service = new WidgetService();
 
-  it('converts messages to alternating turns', () => {
-    const messages = [
-      { sender: 'visitor', text: 'Hello' },
-      { sender: 'assistant', text: 'Hi there' },
-      { sender: 'visitor', text: 'Pricing?' },
-    ] as any;
-
-    expect(service.historyToTurns(messages)).toEqual([
-      { role: 'user', text: 'Hello' },
-      { role: 'model', text: 'Hi there' },
-      { role: 'user', text: 'Pricing?' },
+  it('drops the opening assistant message and merges same-side neighbours', () => {
+    expect(
+      service.historyToTurns([
+        { sender: 'assistant', text: 'Hi!' },
+        { sender: 'visitor', text: 'one' },
+        { sender: 'visitor', text: 'two' },
+        { sender: 'assistant', text: 'answer' },
+      ]),
+    ).toEqual([
+      { role: 'user', text: 'one\n\ntwo' },
+      { role: 'assistant', text: 'answer' },
     ]);
   });
+});
 
-  it('merges consecutive turns from the same role', () => {
-    const messages = [
-      { sender: 'visitor', text: 'Part 1' },
-      { sender: 'visitor', text: 'Part 2' },
-      { sender: 'assistant', text: 'Reply' },
-    ] as any;
-
-    expect(service.historyToTurns(messages)).toEqual([
-      { role: 'user', text: 'Part 1\n\nPart 2' },
-      { role: 'model', text: 'Reply' },
-    ]);
+describe('WidgetService.buildMessage', () => {
+  it('attaches sources only when there are some', () => {
+    const service = new WidgetService();
+    expect(service.buildMessage('assistant', 'x')).not.toHaveProperty(
+      'sources',
+    );
+    const sources = [{ title: 'Page', url: 'https://acme.com/a' }];
+    expect(service.buildMessage('assistant', 'x', sources).sources).toEqual(
+      sources,
+    );
   });
 });

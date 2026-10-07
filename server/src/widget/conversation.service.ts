@@ -9,6 +9,10 @@ import {
 } from './schemas/conversation.schema.js';
 import { Message, type MessageDocument } from './schemas/message.schema.js';
 
+/**
+ * Conversations and messages. Every query here is scoped to the tenant in context by
+ * `tenantPlugin`; callers run inside `TenantContextService.run(tenantId, …)`.
+ */
 @Injectable()
 export class ConversationService {
   constructor(
@@ -18,23 +22,33 @@ export class ConversationService {
     private readonly messageModel: Model<MessageDocument>,
   ) {}
 
+  /** The visitor's one conversation on this site, created on first use. */
   async findOrCreate(
-    tenantId: string,
     siteId: string,
     visitorId: string,
   ): Promise<ConversationDocument> {
+    const siteObjectId = new Types.ObjectId(siteId);
     const existing = await this.conversationModel
-      .findOne({ visitorId, siteId: new Types.ObjectId(siteId) })
+      .findOne({ visitorId, siteId: siteObjectId })
       .exec();
     if (existing) return existing;
 
-    return this.conversationModel.create({
-      tenantId: new Types.ObjectId(tenantId),
-      siteId: new Types.ObjectId(siteId),
-      visitorId,
-    });
+    try {
+      return await this.conversationModel.create({
+        siteId: siteObjectId,
+        visitorId,
+      });
+    } catch (error) {
+      // Two messages racing to create the first conversation: the unique index lets one win.
+      const winner = await this.conversationModel
+        .findOne({ visitorId, siteId: siteObjectId })
+        .exec();
+      if (winner) return winner;
+      throw error;
+    }
   }
 
+  /** The most recent `limit` messages, oldest first. */
   async getHistory(
     conversationId: Types.ObjectId,
     limit = 20,
@@ -49,14 +63,15 @@ export class ConversationService {
   }
 
   async saveMessage(
-    conversationId: Types.ObjectId,
+    conversation: Pick<ConversationDocument, '_id' | 'siteId'>,
     sender: 'visitor' | 'assistant',
     text: string,
     clientMessageId?: string,
     sources?: { title: string; url: string }[],
   ): Promise<MessageDocument> {
     return this.messageModel.create({
-      conversationId,
+      conversationId: conversation._id,
+      siteId: conversation.siteId,
       sender,
       text,
       ...(clientMessageId ? { clientMessageId } : {}),

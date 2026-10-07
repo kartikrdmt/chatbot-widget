@@ -15,8 +15,10 @@
   <body>
     <h1>Any customer website</h1>
     <p>The chat button on this page comes from one script tag at the bottom of the page.</p>
-    <p>Only <code>data-site-token</code> is required. All branding and text come from the
-       server config. The optional attributes below are developer overrides.</p>
+    <p>
+      Only <code>data-site-token</code> is required. All branding and text come from the server
+      config. The optional attributes below are developer overrides.
+    </p>
 
     <!--
       data-site-token          Site public token (st_…) — the only required attribute.
@@ -44,6 +46,12 @@
       data-text-color          Main text colour
       data-muted-color         Secondary text: timestamps, "Today", placeholder
       data-border-color        Borders and divider lines
+      data-radius              Corner style: square | rounded | pill
+      data-font                A Google Font name, e.g. Inter
+
+      Versions: /widget.js and /v1/widget.js always serve the latest 1.x. To pin a build, use
+      /v1.0.0/widget.js with an integrity="sha384-…" attribute and crossorigin="anonymous"; the
+      hash is in /v1.0.0/integrity.json.
 
       Deprecated (accepted for one release, then removed):
       data-key                 Old widget key — use data-site-token instead

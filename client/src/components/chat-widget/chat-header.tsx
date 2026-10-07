@@ -29,7 +29,7 @@ export function ChatHeader({
             type="button"
             onClick={onToggleExpand}
             aria-label={expanded ? 'Collapse chat' : 'Expand chat'}
-            className="flex size-9 cursor-pointer items-center justify-center rounded-lg opacity-80 hover:bg-white/10"
+            className="flex size-9 cursor-pointer items-center justify-center rounded-[var(--chat-radius-control)] opacity-80 hover:bg-chat-accent-foreground/10"
           >
             <ExpandIcon className="size-4" aria-hidden />
           </button>
@@ -39,7 +39,7 @@ export function ChatHeader({
             type="button"
             onClick={onClose}
             aria-label="Close chat"
-            className="flex size-9 cursor-pointer items-center justify-center rounded-lg bg-white/15 hover:bg-white/25"
+            className="flex size-9 cursor-pointer items-center justify-center rounded-[var(--chat-radius-control)] bg-chat-accent-foreground/15 hover:bg-chat-accent-foreground/25"
           >
             <X className="size-4" aria-hidden />
           </button>

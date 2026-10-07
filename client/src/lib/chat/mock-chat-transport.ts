@@ -3,7 +3,7 @@ import type {
   WidgetMessage,
   WidgetMessageDelta,
   WidgetMessageSender,
-} from '@/lib/contracts/widget';
+} from '@myra/contracts';
 
 import { type ChatTransport, type ConnectionStatus, Emitter } from './chat-transport';
 

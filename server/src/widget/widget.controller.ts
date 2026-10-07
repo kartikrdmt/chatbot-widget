@@ -10,17 +10,23 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 
+import { SkipTenant } from '../common/decorators/index.js';
+import { TenantContextService } from '../common/services/tenant-context.service.js';
+
 import type { ServerConfigResponse } from './widget.service.js';
 import { WidgetService } from './widget.service.js';
 import { SiteService } from './site.service.js';
 import { SessionService } from './session.service.js';
 
+/** No tenant header here: the tenant comes from the site token, then every query is scoped to it. */
+@SkipTenant()
 @Controller('widget')
 export class WidgetController {
   constructor(
     private readonly widget: WidgetService,
     private readonly sites: SiteService,
     private readonly session: SessionService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   /**
@@ -38,13 +44,20 @@ export class WidgetController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<ServerConfigResponse> {
     if (!token?.trim()) {
-      throw new BadRequestException('Missing required "token" query parameter.');
+      throw new BadRequestException(
+        'Missing required "token" query parameter.',
+      );
     }
     if (!origin?.trim()) {
       throw new ForbiddenException(
         'Origin header is required for widget config requests.',
       );
     }
+
+    // Echo the origin before any check, so a rejected website still gets a readable 403/404
+    // (an error message only) and the widget can log why it is not shown.
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.vary('Origin');
 
     const site = await this.sites.findByToken(token.trim());
     if (!site) throw new NotFoundException('Unknown site token.');
@@ -55,26 +68,27 @@ export class WidgetController {
       );
     }
 
-    let visitorId = existingVisitorId?.trim() ?? '';
-    if (!visitorId) {
-      visitorId = await this.sites.createVisitor(
-        site.tenantId.toString(),
-        site._id.toString(),
-      );
-    } else {
-      await this.sites.touchVisitor(visitorId);
+    const tenantId = site.tenantId;
+    const siteId = site._id.toString();
+
+    // A disabled site gets no session at all, so no chat can start.
+    if (site.status === 'disabled') {
+      return this.widget.getConfigResponse(site);
     }
 
-    const sessionResult = this.session.create({
-      tenantId: site.tenantId.toString(),
-      siteId: site._id.toString(),
-      visitorId,
-      origin,
+    // From here on every query runs for this site's tenant, and only that tenant.
+    return this.tenantContext.run(tenantId, async () => {
+      const visitorId = await this.sites.resolveVisitor(
+        siteId,
+        existingVisitorId,
+      );
+      const sessionResult = this.session.create({
+        tenantId,
+        siteId,
+        visitorId,
+        origin,
+      });
+      return this.widget.getConfigResponse(site, sessionResult, visitorId);
     });
-
-    response.setHeader('Access-Control-Allow-Origin', origin);
-    response.vary('Origin');
-
-    return this.widget.getConfigResponse(site, sessionResult, visitorId);
   }
 }

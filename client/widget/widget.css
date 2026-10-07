@@ -4,7 +4,6 @@
  */
 @import 'tailwindcss' source(none);
 @source '../src/components/chat-widget';
-@source './widget-app.tsx';
 
 /* Defaults for the theme, overridden by the data-* colour options or server config. */
 :host {
@@ -16,7 +15,10 @@
   --chat-dim: oklch(0.62 0.025 265);
   --chat-accent: oklch(0.31 0.075 265);
   --chat-accent-foreground: oklch(1 0 0);
-  --chat-radius: 0.75rem;
+  --chat-radius-window: 1rem;
+  --chat-radius-bubble: 1rem;
+  --chat-radius-control: 0.5rem;
+  --chat-radius-launcher: 9999px;
 }
 
 @theme inline {

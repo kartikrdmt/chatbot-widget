@@ -1,4 +1,4 @@
-import { WidgetPositionSchema } from './widget.contracts.js';
+import { WidgetPositionSchema } from '@myra/contracts';
 import { z } from 'zod';
 
 const OriginSchema = z.string().refine(

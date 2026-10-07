@@ -1,4 +1,14 @@
+import { readFileSync } from 'node:fs';
 import type { NextConfig } from 'next';
+
+// The widget is published by `npm run build:widget` (see scripts/build-widget.mjs).
+const { widgetVersion } = JSON.parse(readFileSync('package.json', 'utf8')) as {
+  widgetVersion: string;
+};
+const widgetMajor = widgetVersion.split('.')[0];
+
+/** Customers' pages load these files from another website. */
+const cors = { key: 'Access-Control-Allow-Origin', value: '*' };
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -7,11 +17,20 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Aliases that always point at the newest build: the browser must check for a new one
+        // (a 304 when nothing changed), so a release reaches visitors on their next page load.
         source: '/widget.js',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Cache-Control', value: 'public, max-age=300' },
-        ],
+        headers: [cors, { key: 'Cache-Control', value: 'public, no-cache' }],
+      },
+      {
+        source: `/v${widgetMajor}/:path*`,
+        headers: [cors, { key: 'Cache-Control', value: 'public, no-cache' }],
+      },
+      {
+        // A versioned build never changes (the chat file's name carries its content hash), so
+        // browsers and CDNs may keep it for a year.
+        source: `/v${widgetVersion}/:path*`,
+        headers: [cors, { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },
     ];
   },

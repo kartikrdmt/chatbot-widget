@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { WIDGET_LIMITS } from '@myra/contracts';
 
 import { GEMINI_DEFAULT_MODEL, GEMINI_TIMEOUT_MS } from './widget.constants.js';
 
@@ -15,6 +16,23 @@ interface GeminiResponse {
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+const RETRY_STATUSES = new Set([429, 500, 503]);
+const RETRY_DELAYS_MS = [800, 2_000];
+
+/** Gemini answers 503 when it is briefly overloaded, so retry a couple of times before giving up. */
+async function fetchWithRetry(
+  url: string,
+  init: () => RequestInit,
+): Promise<Response> {
+  for (const delay of RETRY_DELAYS_MS) {
+    const response = await fetch(url, init());
+    if (!RETRY_STATUSES.has(response.status)) return response;
+    await response.body?.cancel();
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  return fetch(url, init());
+}
+
 /** Thin client for Gemini's generateContent and streamGenerateContent endpoints. */
 @Injectable()
 export class GeminiService {
@@ -28,19 +46,27 @@ export class GeminiService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('GEMINI_API_KEY is not set.');
 
-    const resolvedModel = model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL;
-    const response = await fetch(`${ENDPOINT}/${resolvedModel}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: turns.map((turn) => ({
-          role: turn.role,
-          parts: [{ text: turn.text }],
-        })),
+    const resolvedModel =
+      model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL;
+    const response = await fetchWithRetry(
+      `${ENDPOINT}/${resolvedModel}:generateContent`,
+      () => ({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: { maxOutputTokens: WIDGET_LIMITS.maxOutputTokens },
+          contents: turns.map((turn) => ({
+            role: turn.role,
+            parts: [{ text: turn.text }],
+          })),
+        }),
       }),
-    });
+    );
 
     if (!response.ok) {
       this.logger.error(
@@ -68,21 +94,26 @@ export class GeminiService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('GEMINI_API_KEY is not set.');
 
-    const resolvedModel = model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL;
-    const response = await fetch(
+    const resolvedModel =
+      model ?? process.env.GEMINI_MODEL ?? GEMINI_DEFAULT_MODEL;
+    const response = await fetchWithRetry(
       `${ENDPOINT}/${resolvedModel}:streamGenerateContent?alt=sse`,
-      {
+      () => ({
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: { maxOutputTokens: WIDGET_LIMITS.maxOutputTokens },
           contents: turns.map((turn) => ({
             role: turn.role,
             parts: [{ text: turn.text }],
           })),
         }),
-      },
+      }),
     );
 
     if (!response.ok || !response.body) {

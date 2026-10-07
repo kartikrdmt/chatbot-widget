@@ -1,41 +1,62 @@
 import { randomUUID } from 'node:crypto';
 
+import { Inject, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ConnectedSocket,
   MessageBody,
   type OnGatewayConnection,
+  type OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import type { Socket } from 'socket.io';
-
-import { ConversationService } from './conversation.service.js';
-import { RagService } from './rag.service.js';
-import { RateLimitService } from './rate-limit.service.js';
-import { SessionService } from './session.service.js';
-import { SiteService } from './site.service.js';
 import {
   type SessionPayload,
   type WidgetChatError,
   type WidgetMessage,
   type WidgetMessageSender,
+  type WidgetSource,
   WIDGET_EVENTS,
+  WIDGET_LIMITS,
   WIDGET_SOCKET_NAMESPACE,
   WidgetSocketAuthSchema,
   WidgetVisitorMessageSchema,
-} from './widget.contracts.js';
+} from '@myra/contracts';
+import type { Socket } from 'socket.io';
+
+import type { AppConfig } from '../config/configuration.js';
+import { TenantContextService } from '../common/services/tenant-context.service.js';
+import {
+  ANSWER_PROVIDER,
+  type AnswerProvider,
+} from './answer/answer-provider.js';
+import { ConversationService } from './conversation.service.js';
+import { RateLimitService, type RateLimitScope } from './rate-limit.service.js';
+import { SessionService } from './session.service.js';
+import { SiteService } from './site.service.js';
+import { UsageService } from './usage.service.js';
 import { WIDGET_ERROR_REPLY } from './widget.constants.js';
 import { WidgetService } from './widget.service.js';
 
+/** Used for a tenant that has no record (or no limit set) yet. */
+const DEFAULT_MONTHLY_LIMIT = 1_000;
+
 @WebSocketGateway({ namespace: WIDGET_SOCKET_NAMESPACE })
-export class WidgetGateway implements OnGatewayConnection {
+export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  private readonly logger = new Logger(WidgetGateway.name);
+  /** Open connections per IP address. */
+  private readonly connectionsByIp = new Map<string, number>();
+
   constructor(
     private readonly widget: WidgetService,
     private readonly sites: SiteService,
     private readonly session: SessionService,
     private readonly conversations: ConversationService,
     private readonly rateLimiter: RateLimitService,
-    private readonly rag: RagService,
+    private readonly usage: UsageService,
+    @Inject(ANSWER_PROVIDER) private readonly answers: AnswerProvider,
+    private readonly tenantContext: TenantContextService,
+    private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
   handleConnection(client: Socket): void {
@@ -47,23 +68,41 @@ export class WidgetGateway implements OnGatewayConnection {
 
     const payload = this.session.verify(auth.data.sessionToken);
     if (!payload) {
+      // Tell the widget why, so it can fetch a fresh session instead of retrying this one.
+      this.reject(client, 'session_expired');
       client.disconnect(true);
       return;
     }
 
-    // Browsers always send Origin on socket connections.
-    // Server-side callers without an Origin are rejected (SaaS widget only).
+    // Browsers always send Origin on socket connections. Callers without one are refused, and so
+    // is a token used from a different website than the one it was issued to.
     const origin = client.handshake.headers.origin;
-    if (!origin) {
-      client.disconnect(true);
-      return;
-    }
-    if (origin !== payload.origin) {
+    if (!origin || origin !== payload.origin) {
       client.disconnect(true);
       return;
     }
 
-    (client.data as Record<string, unknown>)['session'] = payload;
+    const ip = this.clientIp(client);
+    const open = this.connectionsByIp.get(ip) ?? 0;
+    if (open >= WIDGET_LIMITS.ipConnections) {
+      this.reject(client, 'rate_limited', 30);
+      client.disconnect(true);
+      return;
+    }
+    this.connectionsByIp.set(ip, open + 1);
+
+    const data = client.data as Record<string, unknown>;
+    data['session'] = payload;
+    data['sessionExpiresAt'] = this.session.expiresAtMs(auth.data.sessionToken);
+    data['counted'] = ip;
+  }
+
+  handleDisconnect(client: Socket): void {
+    const ip = (client.data as Record<string, unknown>)['counted'];
+    if (typeof ip !== 'string') return;
+    const open = (this.connectionsByIp.get(ip) ?? 1) - 1;
+    if (open > 0) this.connectionsByIp.set(ip, open);
+    else this.connectionsByIp.delete(ip);
   }
 
   /** Ack handler: client sends an empty body and receives the history array. */
@@ -74,19 +113,20 @@ export class WidgetGateway implements OnGatewayConnection {
     const session = this.getSession(client);
     if (!session) return [];
 
-    const conversation = await this.conversations.findOrCreate(
-      session.tenantId,
-      session.siteId,
-      session.visitorId,
-    );
-    const messages = await this.conversations.getHistory(conversation._id);
-    return messages.map((m) =>
-      this.widget.buildMessage(
-        m.sender as WidgetMessageSender,
-        m.text,
-        m.sources,
-      ),
-    );
+    return this.tenantContext.run(session.tenantId, async () => {
+      const conversation = await this.conversations.findOrCreate(
+        session.siteId,
+        session.visitorId,
+      );
+      const messages = await this.conversations.getHistory(conversation._id);
+      return messages.map((m) =>
+        this.widget.buildMessage(
+          m.sender as WidgetMessageSender,
+          m.text,
+          m.sources,
+        ),
+      );
+    });
   }
 
   @SubscribeMessage(WIDGET_EVENTS.visitorMessage)
@@ -97,81 +137,120 @@ export class WidgetGateway implements OnGatewayConnection {
     const session = this.getSession(client);
     if (!session) return;
 
-    const parsed = WidgetVisitorMessageSchema.safeParse(body);
-    if (!parsed.success) return;
-
-    const site = await this.sites.findById(session.siteId);
-    if (!site) return;
-
-    // Rate limiting
-    const perMinute = site.settings?.messagesPerMinute;
-    const perDay = site.settings?.messagesPerDay;
-    const rateResult = this.rateLimiter.check(
-      session.visitorId,
-      perMinute,
-      perDay,
-    );
-    if (!rateResult.allowed) {
-      const error: WidgetChatError = {
-        code: rateResult.quotaExceeded ? 'quota_exceeded' : 'rate_limited',
-        ...(rateResult.retryAfter !== undefined
-          ? { retryAfter: rateResult.retryAfter }
-          : {}),
-      };
-      client.emit(WIDGET_EVENTS.error, error);
+    // A connection can outlive its 15-minute token. Refuse the message without saving it, so the
+    // widget can refresh the session and resend the same message.
+    const expiresAt = (client.data as Record<string, unknown>)[
+      'sessionExpiresAt'
+    ];
+    if (typeof expiresAt === 'number' && Date.now() > expiresAt) {
+      this.reject(client, 'session_expired');
       return;
     }
 
-    // Get or create conversation
+    const parsed = WidgetVisitorMessageSchema.safeParse(body);
+    if (!parsed.success) return;
+
+    // Everything below runs for this session's tenant, and only that tenant.
+    await this.tenantContext.run(session.tenantId, () =>
+      this.handleVisitorMessage(parsed.data, client, session),
+    );
+  }
+
+  private async handleVisitorMessage(
+    message: { text: string; clientMessageId: string },
+    client: Socket,
+    session: SessionPayload,
+  ): Promise<void> {
+    const site = await this.sites.findById(session.siteId);
+    if (!site) return;
+
+    // The emergency switch applies to chats already open, not just new ones.
+    const tenant = await this.sites.findTenant(session.tenantId);
+    if (site.status === 'disabled' || tenant?.status === 'disabled') {
+      this.reject(client, 'disabled');
+      return;
+    }
+
     const conversation = await this.conversations.findOrCreate(
-      session.tenantId,
       session.siteId,
       session.visitorId,
     );
 
-    // Dedup: skip if client already sent this message ID
+    // A message the client sends again (after a reconnect) is not counted or answered twice.
     if (
       await this.conversations.isDuplicate(
         conversation._id,
-        parsed.data.clientMessageId,
+        message.clientMessageId,
       )
-    ) {
+    )
+      return;
+
+    // Limits come BEFORE anything that costs money: the model call.
+    const settings = site.settings ?? {};
+    const scopes: RateLimitScope[] = [
+      {
+        key: `visitor:${session.visitorId}`,
+        perMinute:
+          settings.messagesPerMinute ?? WIDGET_LIMITS.visitorMessagesPerMinute,
+        ...(settings.messagesPerDay !== undefined
+          ? { perDay: settings.messagesPerDay }
+          : {}),
+      },
+      {
+        key: `ip:${this.clientIp(client)}`,
+        perMinute: WIDGET_LIMITS.ipMessagesPerMinute,
+      },
+      {
+        key: `site:${session.siteId}`,
+        perMinute:
+          settings.siteMessagesPerMinute ?? WIDGET_LIMITS.siteMessagesPerMinute,
+      },
+    ];
+    const rate = await this.rateLimiter.checkAll(scopes);
+    if (!rate.allowed) {
+      this.reject(
+        client,
+        rate.quotaExceeded ? 'quota_exceeded' : 'rate_limited',
+        rate.retryAfter,
+      );
       return;
     }
 
-    // Persist visitor message
-    await this.conversations.saveMessage(
-      conversation._id,
-      'visitor',
-      parsed.data.text,
-      parsed.data.clientMessageId,
+    const quota = await this.usage.monthlyStatus(
+      session.tenantId,
+      tenant?.monthlyMessageLimit ?? DEFAULT_MONTHLY_LIMIT,
     );
+    if (!quota.allowed) {
+      this.reject(client, 'quota_exceeded');
+      return;
+    }
 
-    // Build Gemini turns from stored history (excluding the message we just saved)
-    const history = await this.conversations.getHistory(conversation._id, 20);
+    await this.conversations.saveMessage(
+      conversation,
+      'visitor',
+      message.text,
+      message.clientMessageId,
+    );
+    await this.usage.recordMessage(session.siteId);
+
+    // The model sees the last few messages (not including the one just saved).
+    const history = await this.conversations.getHistory(
+      conversation._id,
+      WIDGET_LIMITS.historyTurns + 1,
+    );
     const turns = this.widget.historyToTurns(
       history.slice(0, history.length - 1),
     );
 
-    // RAG context (no-op placeholder)
-    const ragContext = await this.rag.retrieve(
-      parsed.data.text,
-      session.siteId,
-    );
-
     client.emit(WIDGET_EVENTS.typing, true);
-
     const messageId = randomUUID();
+    const streaming = site.settings?.features?.streaming !== false;
     let fullText = '';
+    let sources: WidgetSource[] = [];
 
     try {
-      const features = site.settings?.features as
-        | { streaming?: boolean }
-        | undefined;
-      const useStreaming = features?.streaming !== false;
-
-      if (useStreaming) {
-        // Emit a placeholder message so the client renders the streaming bubble immediately
+      if (streaming) {
+        // An empty placeholder first, so the widget shows its typing dots in the reply's place.
         client.emit(WIDGET_EVENTS.message, {
           id: messageId,
           sender: 'assistant',
@@ -179,52 +258,66 @@ export class WidgetGateway implements OnGatewayConnection {
           createdAt: new Date().toISOString(),
           streaming: true,
         } satisfies WidgetMessage);
+      }
 
-        for await (const chunk of this.widget.replyStream(
-          parsed.data.text,
-          turns,
-          site,
-        )) {
-          fullText += chunk;
-          client.emit(WIDGET_EVENTS.messageDelta, { id: messageId, delta: chunk });
+      for await (const event of this.answers.answer({
+        site,
+        tenantId: session.tenantId,
+        conversationId: conversation._id.toString(),
+        question: message.text,
+        history: turns,
+      })) {
+        if (event.type === 'sources') {
+          sources = event.sources;
+        } else {
+          fullText += event.text;
+          if (streaming) {
+            client.emit(WIDGET_EVENTS.messageDelta, {
+              id: messageId,
+              delta: event.text,
+            });
+          }
         }
+      }
 
-        // Signal end-of-stream then emit the authoritative final message with sources
+      if (!fullText.trim())
+        throw new Error('The answer provider returned no text.');
+
+      if (streaming) {
         client.emit(WIDGET_EVENTS.messageDelta, {
           id: messageId,
           delta: '',
           done: true,
         });
-
-        const finalMsg = this.widget.buildMessage(
-          'assistant',
-          fullText,
-          ragContext.sources,
-        );
-        finalMsg.id = messageId;
-        client.emit(WIDGET_EVENTS.message, finalMsg);
-      } else {
-        const reply = await this.widget.reply(parsed.data.text, turns, site);
-        if (ragContext.sources.length) {
-          reply.sources = ragContext.sources;
-        }
-        client.emit(WIDGET_EVENTS.message, reply);
-        fullText = reply.text;
       }
+      // The authoritative final message replaces the streamed partial (same id), with its sources.
+      const finalMessage = this.widget.buildMessage(
+        'assistant',
+        fullText,
+        sources,
+      );
+      finalMessage.id = messageId;
+      client.emit(WIDGET_EVENTS.message, finalMessage);
 
       await this.conversations.saveMessage(
-        conversation._id,
+        conversation,
         'assistant',
-        fullText || WIDGET_ERROR_REPLY,
+        fullText,
         undefined,
-        ragContext.sources.length ? ragContext.sources : undefined,
+        sources,
       );
     } catch (error) {
-      const fallback = this.widget.buildMessage('assistant', WIDGET_ERROR_REPLY);
+      this.logger.error(error instanceof Error ? error.message : String(error));
+      const fallback = this.widget.buildMessage(
+        'assistant',
+        WIDGET_ERROR_REPLY,
+      );
+      // Reuse the id so it replaces the empty streaming bubble instead of sitting beside it.
+      fallback.id = messageId;
       client.emit(WIDGET_EVENTS.message, fallback);
-      // Also persist the error reply so history is consistent
+      // Persist the apology too, so a refresh shows what the visitor saw.
       await this.conversations.saveMessage(
-        conversation._id,
+        conversation,
         'assistant',
         WIDGET_ERROR_REPLY,
       );
@@ -233,9 +326,31 @@ export class WidgetGateway implements OnGatewayConnection {
     }
   }
 
+  private reject(
+    client: Socket,
+    code: WidgetChatError['code'],
+    retryAfter?: number,
+  ): void {
+    client.emit(WIDGET_EVENTS.error, {
+      code,
+      ...(retryAfter !== undefined ? { retryAfter } : {}),
+    } satisfies WidgetChatError);
+  }
+
   private getSession(client: Socket): SessionPayload | undefined {
-    return (client.data as Record<string, unknown>)[
-      'session'
-    ] as SessionPayload | undefined;
+    return (client.data as Record<string, unknown>)['session'] as
+      SessionPayload | undefined;
+  }
+
+  /** The visitor's address. Behind a proxy (`TRUST_PROXY=true`) it is the first X-Forwarded-For. */
+  private clientIp(client: Socket): string {
+    if (this.config.get('trustProxy', { infer: true })) {
+      const forwarded = client.handshake.headers['x-forwarded-for'];
+      const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+        ?.split(',')[0]
+        ?.trim();
+      if (first) return first;
+    }
+    return client.handshake.address;
   }
 }

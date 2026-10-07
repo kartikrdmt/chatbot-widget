@@ -53,6 +53,12 @@ function axis(
   return { [where]: distance };
 }
 
+/** The corner or edge the panel grows out of, so it appears to unfold from the launcher. */
+export function panelOrigin(position: Position): string {
+  const { vertical, horizontal } = parsePosition(position);
+  return `${vertical} ${horizontal}`;
+}
+
 export interface FloatingLayout {
   launcher: CSSProperties;
   panel: CSSProperties;

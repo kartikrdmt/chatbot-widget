@@ -1,6 +1,6 @@
 'use client';
 
-import type { WidgetAppearance, WidgetConfig } from '@/lib/contracts/widget';
+import type { WidgetAppearance, WidgetConfig } from '@myra/contracts';
 
 import { useChat } from '@/hooks/use-chat';
 

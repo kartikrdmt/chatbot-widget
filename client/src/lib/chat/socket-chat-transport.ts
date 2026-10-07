@@ -7,7 +7,7 @@ import {
   type WidgetMessageDelta,
   WidgetMessageDeltaSchema,
   WidgetMessageSchema,
-} from '@/lib/contracts/widget';
+} from '@myra/contracts';
 import { io, type Socket } from 'socket.io-client';
 
 import { type ChatTransport, type ConnectionStatus, Emitter } from './chat-transport';
@@ -55,21 +55,20 @@ export class SocketChatTransport implements ChatTransport {
 
   loadHistory(): Promise<WidgetMessage[]> {
     return new Promise((resolve) => {
-      this.socket.emit(
-        WIDGET_EVENTS.history,
-        {},
-        (response: unknown) => {
-          if (response && typeof response === 'object' && 'messages' in response) {
-            const messages = (response as { messages: unknown[] }).messages
-              .map((m) => WidgetMessageSchema.safeParse(m))
-              .filter((r) => r.success)
-              .map((r) => (r as { success: true; data: WidgetMessage }).data);
-            resolve(messages);
-          } else {
-            resolve([]);
-          }
-        },
-      );
+      this.socket.emit(WIDGET_EVENTS.history, {}, (response: unknown) => {
+        // The server answers with the list itself; an object with `messages` is accepted too.
+        const list = Array.isArray(response)
+          ? response
+          : response && typeof response === 'object' && 'messages' in response
+            ? (response as { messages: unknown }).messages
+            : [];
+        resolve(
+          (Array.isArray(list) ? list : [])
+            .map((m) => WidgetMessageSchema.safeParse(m))
+            .filter((r) => r.success)
+            .map((r) => (r as { success: true; data: WidgetMessage }).data),
+        );
+      });
     });
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import type { WidgetChatError, WidgetFeatures, WidgetMessage } from '@/lib/contracts/widget';
+import type { WidgetChatError, WidgetFeatures, WidgetMessage } from '@myra/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { type ChatTransport, type ConnectionStatus, createChatTransport } from '@/lib/chat';
@@ -52,6 +52,10 @@ export function useChat({
 
   const transportRef = useRef<ChatTransport | null>(null);
   const lastSentRef = useRef<{ text: string; clientMessageId: string } | null>(null);
+  // True from sending a message until the assistant answers it.
+  const awaitingReplyRef = useRef(false);
+  // A message the server refused because the session had expired, to resend once reconnected.
+  const resendRef = useRef<{ text: string; clientMessageId: string } | null>(null);
   const offlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep callbacks in refs so transport effect doesn't re-run when they change
@@ -60,11 +64,21 @@ export function useChat({
   const greetingRef = useRef(greeting);
   const offlineMessageRef = useRef(offlineMessage);
   const featuresRef = useRef(features);
-  useEffect(() => { onSessionExpiredRef.current = onSessionExpired; }, [onSessionExpired]);
-  useEffect(() => { onDisabledRef.current = onDisabled; }, [onDisabled]);
-  useEffect(() => { greetingRef.current = greeting; }, [greeting]);
-  useEffect(() => { offlineMessageRef.current = offlineMessage; }, [offlineMessage]);
-  useEffect(() => { featuresRef.current = features; }, [features]);
+  useEffect(() => {
+    onSessionExpiredRef.current = onSessionExpired;
+  }, [onSessionExpired]);
+  useEffect(() => {
+    onDisabledRef.current = onDisabled;
+  }, [onDisabled]);
+  useEffect(() => {
+    greetingRef.current = greeting;
+  }, [greeting]);
+  useEffect(() => {
+    offlineMessageRef.current = offlineMessage;
+  }, [offlineMessage]);
+  useEffect(() => {
+    featuresRef.current = features;
+  }, [features]);
 
   useEffect(() => {
     const transport = createChatTransport(sessionToken, apiUrl);
@@ -79,6 +93,7 @@ export function useChat({
 
     const unsubscribers = [
       transport.onMessage((message) => {
+        if (message.sender !== 'visitor') awaitingReplyRef.current = false;
         setMessages((prev) => {
           // Replace a streaming partial with the final message
           const idx = prev.findIndex((m) => m.id === message.id);
@@ -124,11 +139,33 @@ export function useChat({
           clearOfflineTimer();
           setChatError(null);
           transport.loadHistory().then((historyMessages) => {
-            setMessages(
+            let next =
               historyMessages.length > 0
                 ? historyMessages
-                : [buildMessage('assistant', greetingRef.current)],
-            );
+                : [buildMessage('assistant', greetingRef.current)];
+
+            // After a session refresh, send the refused message again, once. If the server
+            // already has it as the visitor's latest message, there is nothing to resend.
+            const pending = resendRef.current;
+            resendRef.current = null;
+            if (pending) {
+              const lastVisitor = [...historyMessages]
+                .reverse()
+                .find((m) => m.sender === 'visitor');
+              if (lastVisitor?.text !== pending.text) {
+                next = [
+                  ...next,
+                  {
+                    id: pending.clientMessageId,
+                    sender: 'visitor',
+                    text: pending.text,
+                    createdAt: new Date().toISOString(),
+                  },
+                ];
+                transport.sendMessage(pending.text, pending.clientMessageId);
+              }
+            }
+            setMessages(next);
           });
         }
 
@@ -159,6 +196,7 @@ export function useChat({
         } else if (error.code === 'disabled') {
           onDisabledRef.current();
         } else if (error.code === 'session_expired') {
+          if (awaitingReplyRef.current) resendRef.current = lastSentRef.current;
           onSessionExpiredRef.current();
         }
       }),
@@ -181,6 +219,7 @@ export function useChat({
 
     const clientMessageId = crypto.randomUUID();
     lastSentRef.current = { text: trimmed, clientMessageId };
+    awaitingReplyRef.current = true;
     setMessages((prev) => [...prev, buildMessage('visitor', trimmed)]);
     transportRef.current.sendMessage(trimmed, clientMessageId);
   }, []);

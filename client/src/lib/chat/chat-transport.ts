@@ -1,4 +1,4 @@
-import type { WidgetChatError, WidgetMessage, WidgetMessageDelta } from '@/lib/contracts/widget';
+import type { WidgetChatError, WidgetMessage, WidgetMessageDelta } from '@myra/contracts';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 

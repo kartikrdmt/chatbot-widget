@@ -8,8 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "build:widget": "node scripts/build-widget.mjs",
-    "predev": "npm run build:widget",
-    "prebuild": "npm run build:widget"
+    "predev": "npm --prefix ../packages/contracts run ensure && npm run build:widget",
+    "prebuild": "npm --prefix ../packages/contracts run ensure && npm run build:widget",
+    "test": "vitest run",
+    "pretest": "npm --prefix ../packages/contracts run ensure"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -20,7 +22,8 @@
     "react-markdown": "^10.1.0",
     "socket.io-client": "^4.8.4",
     "tailwind-merge": "^3.7.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@myra/contracts": "file:../packages/contracts"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
@@ -32,6 +35,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.7",
     "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  },
+  "widgetVersion": "1.0.0"
 }

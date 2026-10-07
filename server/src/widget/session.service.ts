@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
-import {
-  SessionPayloadSchema,
-  type SessionPayload,
-} from './widget.contracts.js';
+import { SessionPayloadSchema, type SessionPayload } from '@myra/contracts';
 
 export interface SessionResult {
   token: string;
@@ -22,6 +19,16 @@ export class SessionService {
     const decoded = this.jwt.decode<{ exp: number }>(token);
     const expiresAt = new Date((decoded.exp ?? 0) * 1000).toISOString();
     return { token, expiresAt };
+  }
+
+  /** When the token expires, in ms since the epoch, or null if it cannot be read. */
+  expiresAtMs(token: string): number | null {
+    try {
+      const decoded = this.jwt.decode<{ exp?: number }>(token);
+      return decoded?.exp ? decoded.exp * 1000 : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Verify a token and return its payload, or null if invalid/expired. */

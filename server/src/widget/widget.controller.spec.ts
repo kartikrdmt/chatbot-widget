@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 
-import { GeminiService } from './gemini.service.js';
+import { TenantContextService } from '../common/services/tenant-context.service.js';
 import type { SessionService } from './session.service.js';
 import type { SiteDocument } from './schemas/site.schema.js';
 import type { SiteService } from './site.service.js';
@@ -14,7 +14,7 @@ import { WidgetService } from './widget.service.js';
 
 const DEMO_SITE = {
   _id: { toString: () => 'site-1' },
-  tenantId: { toString: () => 'tenant-1' },
+  tenantId: 'tenant-1',
   publicToken: 'st_acme',
   name: 'Acme',
   allowedOrigins: ['https://acme.com'],
@@ -34,8 +34,16 @@ const makeSites = (
 const mockSites = {
   findByToken: vi.fn().mockResolvedValue(DEMO_SITE),
   isOriginAllowed: vi.fn().mockReturnValue(true),
-  createVisitor: vi.fn().mockResolvedValue('v_test'),
-  touchVisitor: vi.fn().mockResolvedValue(undefined),
+  resolveVisitor: vi.fn().mockResolvedValue('v_test'),
+};
+
+/** Records the tenant each callback ran under, like the real context service. */
+const mockTenantContext = {
+  seen: [] as string[],
+  run: vi.fn(<T>(tenantId: string, callback: () => T): T => {
+    mockTenantContext.seen.push(tenantId);
+    return callback();
+  }),
 };
 
 const mockSession = {
@@ -44,9 +52,10 @@ const mockSession = {
 
 const buildController = (sitesOverride = {}) =>
   new WidgetController(
-    new WidgetService(new GeminiService()),
+    new WidgetService(),
     makeSites(sitesOverride) as unknown as SiteService,
     mockSession as unknown as SessionService,
+    mockTenantContext as unknown as TenantContextService,
   );
 
 const buildResponse = () => {
@@ -65,7 +74,8 @@ describe('WidgetController', () => {
     vi.clearAllMocks();
     mockSites.findByToken.mockResolvedValue(DEMO_SITE);
     mockSites.isOriginAllowed.mockReturnValue(true);
-    mockSites.createVisitor.mockResolvedValue('v_test');
+    mockSites.resolveVisitor.mockResolvedValue('v_test');
+    mockTenantContext.seen = [];
     mockSession.create.mockReturnValue(MOCK_SESSION);
   });
 
@@ -85,7 +95,12 @@ describe('WidgetController', () => {
   it('rejects a missing token with 400', async () => {
     const { response } = buildResponse();
     await expect(
-      buildController().getConfig(undefined, undefined, 'https://acme.com', response),
+      buildController().getConfig(
+        undefined,
+        undefined,
+        'https://acme.com',
+        response,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -100,7 +115,12 @@ describe('WidgetController', () => {
     mockSites.findByToken.mockResolvedValue(null);
     const { response } = buildResponse();
     await expect(
-      buildController().getConfig('st_nope', undefined, 'https://acme.com', response),
+      buildController().getConfig(
+        'st_nope',
+        undefined,
+        'https://acme.com',
+        response,
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -108,7 +128,12 @@ describe('WidgetController', () => {
     mockSites.isOriginAllowed.mockReturnValue(false);
     const { response } = buildResponse();
     await expect(
-      buildController().getConfig('st_acme', undefined, 'https://evil.com', response),
+      buildController().getConfig(
+        'st_acme',
+        undefined,
+        'https://evil.com',
+        response,
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -123,7 +148,8 @@ describe('WidgetController', () => {
     expect(headers['Access-Control-Allow-Origin']).toBe('https://acme.com');
   });
 
-  it('reuses an existing visitorId when provided', async () => {
+  it('asks for the visitor the widget remembered', async () => {
+    mockSites.resolveVisitor.mockResolvedValue('v_existing');
     const { response } = buildResponse();
     const config = await buildController().getConfig(
       'st_acme',
@@ -131,8 +157,56 @@ describe('WidgetController', () => {
       'https://acme.com',
       response,
     );
-    expect(mockSites.createVisitor).not.toHaveBeenCalled();
-    expect(mockSites.touchVisitor).toHaveBeenCalledWith('v_existing');
+    expect(mockSites.resolveVisitor).toHaveBeenCalledWith(
+      'site-1',
+      'v_existing',
+    );
     expect(config.visitorId).toBe('v_existing');
+  });
+
+  it("runs the visitor and session work inside the site's own tenant", async () => {
+    const { response } = buildResponse();
+    await buildController().getConfig(
+      'st_acme',
+      undefined,
+      'https://acme.com',
+      response,
+    );
+    expect(mockTenantContext.seen).toEqual(['tenant-1']);
+    expect(mockSession.create).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant-1', siteId: 'site-1' }),
+    );
+  });
+
+  it('gives a disabled site no session and no visitor', async () => {
+    mockSites.findByToken.mockResolvedValue({
+      ...DEMO_SITE,
+      status: 'disabled',
+    });
+    const { response } = buildResponse();
+    const config = await buildController().getConfig(
+      'st_acme',
+      undefined,
+      'https://acme.com',
+      response,
+    );
+    expect(config.status).toBe('disabled');
+    expect(config.session).toBeUndefined();
+    expect(mockSession.create).not.toHaveBeenCalled();
+    expect(mockSites.resolveVisitor).not.toHaveBeenCalled();
+  });
+
+  it('still tells a rejected website why, by echoing its origin', async () => {
+    mockSites.isOriginAllowed.mockReturnValue(false);
+    const { response, headers } = buildResponse();
+    await expect(
+      buildController().getConfig(
+        'st_acme',
+        undefined,
+        'https://evil.com',
+        response,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(headers['Access-Control-Allow-Origin']).toBe('https://evil.com');
   });
 });
